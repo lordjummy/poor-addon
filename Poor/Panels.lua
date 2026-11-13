@@ -1226,7 +1226,7 @@ local function BuildHome(panel)
 		presence:SetText(#P.roster > 0 and ("%d of %d online   %d with the addon, %d of them online"):format(online, #P.roster, audience, audienceOnline) or "")
 
 		local latest = P.ShownUpdate()
-		if latest then add("Update", ("|cffffd100Version %s is out|r (you have %s). Update with WowUp or the CurseForge app, then restart the game."):format(latest, P.VERSION)) end
+		if latest then add("Update", ("|cffffd100Version %s is out|r (you have %s). Update with WowUp or the CurseForge app, then type /reload."):format(latest, P.VERSION)) end
 
 		-- Groups: open listings, else who is around the player's level.
 		local level = UnitLevel("player")

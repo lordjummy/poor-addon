@@ -257,7 +257,7 @@ end
 
 function P.UpdateNotice()
 	local latest = P.ShownUpdate()
-	return latest and ("|cffffd100Update available:|r poor %s (you have %s). Update with WowUp or the CurseForge app, then restart the game."):format(latest, P.VERSION)
+	return latest and ("|cffffd100Update available:|r poor %s (you have %s). Update with WowUp or the CurseForge app, then type /reload."):format(latest, P.VERSION)
 end
 
 local function SendVersion()

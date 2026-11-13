@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.3
+
+- The update notice now says to /reload after updating; a restart is not needed.
+
 ## 0.14.2
 
 - The Roster shows which version of the addon each member runs.
