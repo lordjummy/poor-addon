@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0
+
+Changes from an outside review of the addon.
+
+- Recruiting is the officers' job unless they open it to members. A guild invite needs a whisper first, and a player only counts as approached once the whisper is sent.
+- Loans: the borrower can no longer delete a debt. They can say it is repaid, and the lender confirms. Officers can clear old debts.
+- Lotteries: the organiser cannot hold tickets, the winner confirms the payout, and a fund holding gold can only be deleted by its keeper.
+- Deaths and repair bills are private unless you opt in, and the setup now says what is shared.
+- The Roster shows who has the addon, and the Groups tab says how many guildmates will see a listing and can say it in guild chat.
+- Names on the Groups tab and items on the Bank tab can be clicked to ask.
+- Setup is four steps, opens the window when done, and asks a new alt only about that character.
+- Tabs with nothing to show stay out of the sidebar. Guild bank characters no longer count on the Poorest board.
+
 ## 0.12.1
 
 - Officers can keep recruiting to themselves: an "Only officers recruit" switch on the Recruit tab.

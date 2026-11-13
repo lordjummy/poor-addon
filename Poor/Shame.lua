@@ -22,6 +22,7 @@ local function Changed()
 end
 
 P.SelfReport("shame", function()
+	if not P.db.opts.shareShame then return nil end -- private unless the player opted in
 	local s = P.db.shame[P.me]
 	if not s or (s.deaths == 0 and s.repairs == 0) then return nil end
 	return ("X^%d^%d"):format(s.deaths, s.repairs)

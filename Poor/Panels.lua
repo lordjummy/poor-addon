@@ -63,12 +63,14 @@ local function BuildBoard(panel)
 		if r.state == "O" and r.author ~= P.me then return "I'll help", P.OfferHelp end
 		if r.state == "C" and r.helper == P.me then return "Withdraw", P.WithdrawHelp end
 		if r.state == "C" and r.author == P.me then return "Got it", P.MarkReceived end
-		if P.IsDebt(r) and r.helper == P.me then return "Repaid", P.MarkRepaid end
+		if P.IsDebt(r) and r.helper == P.me then return r.state == "Q" and "Confirm paid" or "Repaid", P.MarkRepaid end
+		if r.state == "R" and P.IsDebt(r) and r.author == P.me then return "I repaid", P.ClaimRepaid end
 	end
 
 	local function Status(r)
 		if r.state == "O" then return "|cff40ff40open|r" end
 		if r.state == "C" then return "|cffffd100" .. P.ShortName(r.helper or "?") .. " helps|r" end
+		if r.state == "Q" then return "|cffffd100says repaid|r" end
 		return "|cffff4040owes " .. P.ShortName(r.helper or "?") .. "|r"
 	end
 
@@ -113,8 +115,11 @@ local function BuildBoard(panel)
 				GameTooltip:AddLine("Nobody has offered yet.", 0.6, 0.6, 0.6)
 			elseif r.state == "C" then
 				GameTooltip:AddLine(P.ShortName(r.helper or "?") .. " offered to help. " .. P.ShortName(r.author) .. " confirms when it arrives.", 0.6, 0.6, 0.6, true)
+			elseif r.state == "Q" then
+				GameTooltip:AddLine(P.ShortName(r.author) .. " says it is paid back. " .. P.ShortName(r.helper or "?") .. " confirms.", 0.6, 0.6, 0.6, true)
 			else
-				GameTooltip:AddLine("Received. " .. P.ShortName(r.helper or "?") .. " marks it repaid.", 0.6, 0.6, 0.6, true)
+				GameTooltip:AddLine("Received. " .. P.ShortName(r.author) .. " pays it back and " .. P.ShortName(r.helper or "?") .. " confirms. "
+					.. "Only an officer can remove a debt.", 0.6, 0.6, 0.6, true)
 			end
 			GameTooltip:Show()
 		end)
@@ -232,12 +237,21 @@ local function BuildBank(panel)
 		c[2]:SetText(e.count)
 		c[4]:SetText(e.heldBy)
 	end, function(row)
+		row:SetScript("OnClick", function(self)
+			local e = self.data
+			if e.holder and e.holder ~= P.me and e.name then
+				Whisper(e.holder, "Hi! Could I get " .. e.name .. " from the guild bank?")
+			end
+		end)
 		row:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			if GameTooltip.SetItemByID then
 				GameTooltip:SetItemByID(self.data.id)
 			else
 				GameTooltip:SetHyperlink("item:" .. self.data.id)
+			end
+			if self.data.holder and self.data.holder ~= P.me then
+				GameTooltip:AddLine("Click to ask " .. P.ShortName(self.data.holder) .. " for it. Nothing is sent until you press Enter.", 0.6, 0.6, 0.6, true)
 			end
 			GameTooltip:Show()
 		end)
@@ -247,7 +261,20 @@ local function BuildBank(panel)
 		filter = text
 		panel:Refresh()
 	end)
-	local isBank = Check(panel, "This character is a guild bank", -230, function(on) P.SetBankChar(on) end)
+	StaticPopupDialogs["POOR_BANK"] = {
+		text = "Make this character a guild bank?\n\nEverything in its bags and bank will be listed for the whole guild. Only do this on a bank alt.",
+		button1 = YES,
+		button2 = NO,
+		OnAccept = function() P.SetBankChar(true) end,
+		OnCancel = function() panel:Refresh() end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+	local isBank = Check(panel, "This character is a guild bank", -230, function(on)
+		if on then StaticPopup_Show("POOR_BANK") else P.SetBankChar(false) end
+	end)
 	isBank:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		GameTooltip:AddLine("Share this character's items")
@@ -277,7 +304,8 @@ local function BuildBank(panel)
 				for i, h in ipairs(holders) do
 					parts[i] = ClassName(h.name) .. (#holders > 1 and (" " .. h.n) or "")
 				end
-				tinsert(rows, { id = e.id, count = e.count, text = text, sortName = name and name:lower() or "\255", heldBy = table.concat(parts, ", ") })
+				tinsert(rows, { id = e.id, count = e.count, text = text, sortName = name and name:lower() or "\255", heldBy = table.concat(parts, ", "),
+					name = name, holder = holders[1] and holders[1].name })
 			end
 		end
 		table.sort(rows, function(a, b)
@@ -711,13 +739,21 @@ local function BuildGroups(panel)
 		local letters = (need.T and "T" or "") .. (need.H and "H" or "") .. (need.D and "D" or "")
 		local g, err = P.PostGroup(activity:GetText(), letters, picked and picked[2], picked and picked[3])
 		if not g then return P.Print(err) end
+		-- Members without the addon only hear of it through guild chat.
+		if P.db.opts.groupChat then
+			P.SayGuild(("LFG: %s%s. Whisper me!"):format(g.activity, g.need ~= "" and (", need " .. P.RoleNames(g.need)) or ""))
+		end
 		activity:SetText("")
 		activity:ClearFocus()
 		panel:Refresh()
 	end)
 	post:SetPoint("LEFT", role, "RIGHT", 6, 0)
-	local hint = Label(panel, "A listing lasts 30 minutes. Your role is the one you post and join with.")
-	hint:SetPoint("LEFT", post, "RIGHT", 12, 0)
+	local toChat = P.ui.Check(panel, "Also say it in guild chat", function(on) P.db.opts.groupChat = on end)
+	toChat:SetPoint("LEFT", post, "RIGHT", 14, 0)
+	-- Who will see a listing: only guildmates running the addon.
+	local hint = Label(panel)
+	hint:SetPoint("LEFT", toChat, "RIGHT", 150, 0)
+	hint:SetWidth(240)
 	hint:SetTextColor(0.6, 0.6, 0.6)
 
 	local ROLE_COLOR = { T = "|cff6699ff", H = "|cff40ff40", D = "|cffff6060" }
@@ -775,14 +811,36 @@ local function BuildGroups(panel)
 	local empty = Label(panel, "Nobody is looking for a group. Post something and see who bites.", "GameFontDisable")
 	empty:SetPoint("CENTER", panel, "CENTER", 0, -30)
 
-	-- Bottom: who else could come, from the roster
+	-- Bottom: who else could come, from the roster. Each name is a button:
+	-- click to whisper with the question typed, right-click to invite.
 	local could = Label(panel)
-	could:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
-	could:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 10)
-	could:SetHeight(44)
-	could:SetWordWrap(true)
-	could:SetMaxLines(3)
-	could:SetJustifyV("BOTTOM")
+	could:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 36)
+	could:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 36)
+	local couldWhat
+	local names = {}
+	for i = 1, 8 do
+		local b = Button(panel, "", 78, function(self, button)
+			if not self.who then return end
+			if button == "RightButton" then
+				P.Invite(self.who)
+			else
+				Whisper(self.who, ("Hi! Want to come to %s?"):format(couldWhat or "a dungeon"))
+			end
+		end)
+		b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		b:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10 + (i - 1) * 80, 10)
+		b:SetScript("OnEnter", function(self)
+			if not self.who then return end
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine(ClassName(self.who))
+			GameTooltip:AddLine(("Level %d, in %s. %s"):format(self.level or 0, (self.zone and self.zone ~= "") and self.zone or "an unknown place",
+				P.HasAddon(self.who) and "Runs the addon." or "Does not run the addon."), 1, 1, 1, true)
+			GameTooltip:AddLine("Click to ask them, right-click to invite.", 0.6, 0.6, 0.6)
+			GameTooltip:Show()
+		end)
+		b:SetScript("OnLeave", GameTooltip_Hide)
+		names[i] = b
+	end
 
 	function panel:Refresh()
 		role:SetText("My role: " .. P.ROLE_NAME[P.MyRole()])
@@ -790,6 +848,10 @@ local function BuildGroups(panel)
 		local rows = P.GroupList()
 		list:SetRows(rows)
 		empty:SetShown(#rows == 0)
+
+		toChat:SetChecked(P.db.opts.groupChat)
+		local audience, online = P.AddonAudience()
+		hint:SetText(("%d guildmate%s with the addon will see it, %d online."):format(audience, audience == 1 and "" or "s", online))
 
 		-- For the player's own listing, else for the dungeon picked above.
 		local mine = P.MyGroup()
@@ -799,16 +861,23 @@ local function BuildGroups(panel)
 		elseif picked then
 			what, min, max = picked[1], picked[2], picked[3]
 		end
+		couldWhat = what
+		local found = what and P.CouldCome(min, max, mine) or {}
+		for i, b in ipairs(names) do
+			local m = found[i]
+			b:SetShown(m ~= nil)
+			if m then
+				b.who, b.level, b.zone = m.name, m.level, m.zone
+				b:SetText(("%s |cff999999%d|r"):format(P.ClassColored(P.ShortName(m.name):match("^%S+"), m.class), m.level))
+			end
+		end
 		if not what then
 			could:SetText("|cff999999Pick a dungeon to see which online guildmates are in its level range, addon or not.|r")
+		elseif #found == 0 then
+			could:SetText(("|cff999999Nobody else online is level %d-%d right now.|r"):format(min, max))
 		else
-			local parts = {}
-			for i, m in ipairs(P.CouldCome(min, max, mine)) do
-				if i > 14 then parts[15] = "..." break end
-				parts[i] = ("%s |cff999999%d|r"):format(P.ClassColored(P.ShortName(m.name), m.class), m.level)
-			end
-			could:SetText(#parts > 0 and ("|cffdb8f45Online and level %d-%d for %s:|r  %s"):format(min, max, what, table.concat(parts, ", "))
-				or ("|cff999999Nobody else online is level %d-%d right now.|r"):format(min, max))
+			could:SetText(("|cffdb8f45Online and level %d-%d for %s|r%s"):format(min, max, what,
+				#found > #names and ("  |cff999999(%d more not shown)|r"):format(#found - #names) or ""))
 		end
 	end
 end
@@ -970,7 +1039,7 @@ local function BuildRecruit(panel)
 		cells[4]:SetText(c.zone)
 		cells[5]:SetText(done and ("|cff999999" .. done.what .. "|r") or "")
 		row.whisper:SetShown(not done or done.by == P.me)
-		row.invite:SetShown(P.CanInviteToGuild())
+		row.invite:SetShown(P.CanInviteToGuild() and done ~= nil) -- no invites out of the blue
 		row:SetAlpha(done and 0.6 or 1)
 	end, function(row)
 		row.invite = Button(row, "Invite", 54, function() P.InviteToGuild(row.data) end)
@@ -988,7 +1057,8 @@ local function BuildRecruit(panel)
 			if done then
 				GameTooltip:AddLine(("%s %s them %s."):format(done.by == P.me and "You" or P.ShortName(done.by), done.what, P.Ago(done.ts)), 1, 0.82, 0)
 			end
-			GameTooltip:AddLine("Whisper opens the chat box with the pitch typed. Nothing is sent until you press Enter.", 0.6, 0.6, 0.6, true)
+			GameTooltip:AddLine("Whisper opens the chat box with the pitch typed. Nothing is sent until you press Enter. "
+				.. "Invite appears once someone has whispered them.", 0.6, 0.6, 0.6, true)
 			GameTooltip:Show()
 		end)
 	end, -180, 46)
@@ -1021,7 +1091,7 @@ local function BuildRecruit(panel)
 		tools:SetShown(allowed)
 		closed:SetShown(not allowed)
 		officersOnly:SetShown(officer)
-		officersOnly:SetChecked(P.Recruit().officersOnly and true or false)
+		officersOnly:SetChecked(P.RecruitRestricted())
 		heading:SetText(wanted and ("Recruiting: |cffffffff" .. wanted .. "|r") or "|cff999999No class marked as wanted|r")
 		want:SetShown(officer and chosen ~= nil)
 		if chosen then
@@ -1052,14 +1122,22 @@ local function BuildRecruit(panel)
 	end
 end
 
+-- A tab with a `visible` function is left out of the sidebar while it has
+-- nothing to offer this player.
 for _, tab in ipairs({
 	{ "Race", BuildRace },
 	{ "Board", BuildBoard },
-	{ "Shame", BuildShame },
-	{ "Bank", BuildBank },
+	{ "Shame", BuildShame, visible = function() return next(P.db.shame) ~= nil end },
+	{ "Bank", BuildBank, visible = function()
+		if P.AmOfficer() or P.IsBankChar() then return true end
+		for key, blob in pairs(P.db.blobs) do
+			if key:sub(1, 2) == "K:" and #blob.tokens > 0 then return true end
+		end
+		return false
+	end },
 	{ "Crafters", BuildCrafters },
-	{ "Recruit", BuildRecruit },
-	{ "Alerts", BuildAlerts },
+	{ "Recruit", BuildRecruit, visible = function() return P.CanRecruit() end },
+	{ "Alerts", BuildAlerts, visible = function() return #P.db.alertLog > 0 end },
 }) do
 	tinsert(P.tabs, tab)
 end

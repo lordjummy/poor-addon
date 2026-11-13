@@ -346,6 +346,25 @@ function P.ScanRoster()
 	P.Fire("Roster")
 end
 
+--- Whether a member is known to run the addon (heard from in the last month).
+function P.HasAddon(name)
+	if name == P.me then return true end
+	local seen = P.db.addonUsers[name]
+	return seen ~= nil and P.Now() - seen < 30 * DAY
+end
+
+--- How many guildmates run the addon, and how many of those are online now.
+function P.AddonAudience()
+	local total, online = 0, 0
+	for _, m in ipairs(P.roster) do
+		if m.name ~= P.me and P.HasAddon(m.name) then
+			total = total + 1
+			if m.online then online = online + 1 end
+		end
+	end
+	return total, online
+end
+
 --- GM and the rank right below may delete anyone's event.
 function P.IsOfficer(name)
 	local m = P.members[name]
@@ -457,6 +476,9 @@ function P.Leaderboard(combine)
 	for name, g in pairs(P.db.gold) do
 		local key = combine and P.MainOf(name) or name
 		local e = groups[key]
+		-- A guild bank character holds the guild's gold, not its owner's.
+		if P.IsGuildBank and P.IsGuildBank(name) then key, e = nil, nil end
+		if key then
 		if not e then
 			local m, own = P.members[key], P.db.gold[key]
 			e = { name = key, copper = 0, ts = 0, chars = {},
@@ -467,6 +489,7 @@ function P.Leaderboard(combine)
 		end
 		e.copper, e.ts = e.copper + g.copper, math.max(e.ts, g.ts)
 		tinsert(e.chars, name)
+		end
 	end
 	table.sort(list, function(a, b)
 		if a.copper ~= b.copper then return a.copper < b.copper end
@@ -703,7 +726,10 @@ local DEFAULT_OPTS = {
 	-- Gold is private until the player says otherwise: sharing starts off, and
 	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
 	showOffline = false, share = false, shareAsked = false, wizardDone = false, minimap = true, angle = 215, greet = true,
-	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true, groupNotify = true }
+	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true, groupNotify = true,
+	-- Deaths and repair bills are private until opted in. Group posts also go
+	-- to guild chat, so members without the addon see them. Board posts print.
+	shareShame = false, groupChat = true, boardNotify = true }
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.
@@ -794,7 +820,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog", "addonUsers", "wizardChars" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}

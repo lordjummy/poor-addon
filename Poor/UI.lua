@@ -345,17 +345,17 @@ local ARROW_DOWN = " |TInterface\\Buttons\\UI-SortArrow:9:9:0:0:16:16:0:16:0:16|
 local ARROW_UP = " |TInterface\\Buttons\\UI-SortArrow:9:9:0:0:16:16:0:16:16:0|t"
 
 local ROSTER_COLUMNS = {
-	{ "Name", 130 }, { "Lvl", 28, "RIGHT" }, { "Rank", 90 }, { "Zone", 130 }, { "Gold", 100, "RIGHT" }, { "Note", 120 },
+	{ "Name", 140 }, { "Lvl", 28, "RIGHT" }, { "Rank", 90 }, { "Zone", 140 }, { "Addon", 44 }, { "Note", 150 },
 }
 
--- What each column sorts by. Text compares without regard to case; unknown
--- gold sorts below everyone who reported.
+-- What each column sorts by. Text compares without regard to case. The Addon
+-- column marks who will see what is posted on the other tabs.
 local ROSTER_SORT = {
 	function(m) return P.ShortName(m.name):lower() end,
 	function(m) return m.level end,
 	function(m) return m.rankIndex end,
 	function(m) return (m.online and m.zone or ""):lower() end,
-	function(m) local g = P.db.gold[m.name] return g and g.copper or -1 end,
+	function(m) return P.HasAddon(m.name) and 0 or 1 end,
 	function(m) return m.note:lower() end,
 }
 
@@ -372,7 +372,7 @@ local function BuildRoster(panel)
 		c[2]:SetText(m.level)
 		c[3]:SetText(m.rank)
 		c[4]:SetText(m.online and m.zone or "|cff808080offline|r")
-		c[5]:SetText(gold and P.MoneyIcons(gold.copper) or "|cff808080?|r")
+		c[5]:SetText(P.HasAddon(m.name) and "|cff40ff40yes|r" or "|cff606060-|r")
 		c[6]:SetText(m.note)
 		row:SetAlpha(m.online and 1 or 0.55)
 	end, function(row)
@@ -958,6 +958,8 @@ local function BuildFunds(panel)
 	local delete = Button(detail, "Delete", 54, function()
 		local f = P.db.funds[current or ""]
 		if not f then return end
+		local allowed, why = P.CanDeleteFund(f)
+		if not allowed then return P.Print(why or "You cannot delete this one.") end
 		if not IsShiftKeyDown() then return P.Print("Shift-click Delete to remove \"" .. f.title .. "\" for everyone.") end
 		P.DeleteFund(current)
 	end)
@@ -1048,7 +1050,7 @@ local function BuildFunds(panel)
 	pledgeRow:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -122)
 	pledgeRow:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -122)
 	pledgeRow:SetHeight(22)
-	local chip = Button(pledgeRow, "Chip in", 96, function()
+	local chip = Button(pledgeRow, "Pledge gold", 96, function()
 		local f = P.db.funds[current or ""]
 		if not f then return end
 		local dialog = StaticPopup_Show("POOR_PLEDGE", f.price
@@ -1059,7 +1061,7 @@ local function BuildFunds(panel)
 	chip:SetPoint("LEFT", pledgeRow, "LEFT", 0, 0)
 	chip:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine("Promise gold")
+		GameTooltip:AddLine("Promise gold (nothing is paid yet)")
 		GameTooltip:AddLine("Say how much you are sending. When you then trade or mail it, the amount is filled in for you, "
 			.. "and it is recorded as yours the moment it arrives.", 1, 1, 1, true)
 		GameTooltip:Show()
@@ -1191,8 +1193,16 @@ local function BuildFunds(panel)
 
 	local footer = Label(panel, nil, "GameFontNormalSmall")
 	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	-- The winner of a lottery, and only the winner, confirms the pot arrived.
+	local gotIt = Button(panel, "I received the pot", 130, function()
+		local ok, err = P.ConfirmPayout(current)
+		if not ok and err then P.Print(err) end
+	end)
+	gotIt:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 6)
+	gotIt:Hide()
 
 	function panel:Refresh()
+		gotIt:Hide()
 		local funds = P.FundList()
 		local f
 		for _, candidate in ipairs(funds) do
@@ -1224,7 +1234,7 @@ local function BuildFunds(panel)
 		manage:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, f.closed and -122 or -146)
 		manage:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, f.closed and -122 or -146)
 		chip:SetShown(not keeper)
-		chip:SetText(f.price and "Buy tickets" or "Chip in")
+		chip:SetText(f.price and "Pledge tickets" or "Pledge gold")
 		auto:SetShown(keeper)
 		auto:SetChecked(P.FundAuto(f.id))
 		pledgeText:ClearAllPoints()
@@ -1282,8 +1292,11 @@ local function BuildFunds(panel)
 			end
 			list.heads[5]:SetText(byDonor and "Tickets" or "Received")
 			listEmpty:SetText("Nobody has entered yet.")
+			gotIt:SetShown(f.winner ~= nil and not f.paid and (P.MainOf(P.me) == f.winner or P.me == f.winner))
 			footer:SetText(f.winner
-				and ("Drawn: ticket %d of %d. %s owes %s the pot."):format(f.winTicket, f.winOf, P.ShortName(f.collector), P.ShortName(f.winner))
+				and (f.paid and ("Drawn: ticket %d of %d. %s confirmed receiving the pot."):format(f.winTicket, f.winOf, P.ShortName(f.winner))
+					or ("Drawn: ticket %d of %d. %s owes %s the pot, until %s confirms it arrived."):format(f.winTicket, f.winOf,
+						P.ShortName(f.collector), P.ShortName(f.winner), P.ShortName(f.winner)))
 				or ("%d payment%s from %d player%s. Winner takes all."):format(count, count == 1 and "" or "s", donors, donors == 1 and "" or "s"))
 		else
 			name:SetText(f.title)
@@ -1323,17 +1336,39 @@ P.tabs = {
 P.ui = { Label = Label, Button = Button, EditBox = EditBox, SearchBox = SearchBox, Check = Check, List = List,
 	ClassName = ClassName, Whisper = Whisper, Fill = Fill, Border = Border, ACCENT = ACCENT, COLOR = COLOR, FONT_TITLE = FONT_TITLE }
 
+--- Lay the navigation out again, leaving out tabs that have nothing to show
+--- for this player right now (a tab says so with a `visible` function).
+local function LayoutTabs()
+	local row = 0
+	for i, tab in ipairs(P.tabs) do
+		local shown = not tab.visible or tab.visible()
+		tabButtons[i]:SetShown(shown)
+		if shown then
+			tabButtons[i]:ClearAllPoints()
+			tabButtons[i]:SetPoint("TOPLEFT", window, "TOPLEFT", 1, -HEADER - 10 - row * 26)
+			row = row + 1
+		elseif i == activeTab then
+			activeTab = 1
+		end
+	end
+end
+
 local function SelectTab(index)
 	activeTab = index
+	LayoutTabs()
 	for i, panel in ipairs(panels) do
-		panel:SetShown(i == index)
-		tabButtons[i]:SetSelected(i == index)
+		panel:SetShown(i == activeTab)
+		tabButtons[i]:SetSelected(i == activeTab)
 	end
-	panels[index]:Refresh()
+	panels[activeTab]:Refresh()
 end
 
 local function Refresh()
-	if window and window:IsShown() then panels[activeTab]:Refresh() end
+	if not (window and window:IsShown()) then return end
+	local before = activeTab
+	LayoutTabs()
+	if activeTab ~= before then return SelectTab(activeTab) end
+	panels[activeTab]:Refresh()
 end
 
 -- Where the window sits and how big it is, kept in PoorDB.opts.win.
@@ -1468,6 +1503,7 @@ local function BuildWindow()
 
 	-- Panels keep their original inner layout, which left room for a row of
 	-- tabs on top; shifting them up puts their first line just under the title.
+	window = f -- LayoutTabs positions the navigation on it
 	for i, tab in ipairs(P.tabs) do
 		local panel = CreateFrame("Frame", nil, f)
 		panel:SetPoint("TOPLEFT", f, "TOPLEFT", SIDEBAR, 20)
@@ -1515,6 +1551,11 @@ end
 function P.ToggleWindow()
 	window = window or BuildWindow()
 	window:SetShown(not window:IsShown())
+end
+
+function P.OpenWindow()
+	window = window or BuildWindow()
+	window:Show()
 end
 
 P.On("Roster", Refresh)

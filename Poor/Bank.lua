@@ -11,6 +11,13 @@ local _, P = ...
 local SEND_EVERY = 120 -- seconds between broadcasts while the bags keep changing
 local bankOpen, timer, lastSent = false, false, -SEND_EVERY
 
+--- Whether any character, this account's or another member's, is a guild bank.
+function P.IsGuildBank(name)
+	if P.db.bankChars[name] then return true end
+	local blob = P.db.blobs["K:" .. name]
+	return blob ~= nil and #blob.tokens > 0
+end
+
 function P.IsBankChar(name)
 	return P.db.bankChars[name or P.me] and true or false
 end

@@ -7,8 +7,9 @@ local _, P = ...
 local Label, Button, Check, EditBox = P.ui.Label, P.ui.Button, P.ui.Check, P.ui.EditBox
 local Fill, Border, ACCENT, COLOR = P.ui.Fill, P.ui.Border, P.ui.ACCENT, P.ui.COLOR
 
-local WIDTH, HEIGHT, PAD = 470, 310, 22
+local WIDTH, HEIGHT, PAD = 470, 360, 22
 local frame, pages, step = nil, {}, 1
+local single = false -- one step shown alone, for a new alt of an account that already did the setup
 
 --- A paragraph: wraps inside the page.
 local function Text(page, text, y, font)
@@ -33,28 +34,38 @@ local function Option(page, key, text, y, changed)
 	return check
 end
 
--- Each step: a title, build(page) run once, and optionally leave(page), which
--- returns false (and may show why) to keep the player on the step.
+-- Each step: a title, build(page) run once, show(page) each time it comes
+-- up, and optionally leave(page), which returns false (and may show why) to
+-- keep the player on the step. `live` steps redraw when data arrives.
 local STEPS = {
 	{
 		title = "Welcome to poor",
 		build = function(page)
-			Text(page, "This is the guild's addon: the roster, events, funds and lotteries, who can craft what, PvP alerts, "
-				.. "and a leaderboard of who among us is the poorest.", 0)
-			Text(page, "A few quick questions and you are set. Everything can be changed later under Options, "
-				.. "and you can skip this at any point.", -62)
-			Text(page, "Open the window any time with |cffffffff/poor|r or the copper coin on your minimap.", -112, "GameFontDisable")
+			Text(page, "The guild's addon: find a group, see who can craft what, join events, funds and lotteries, "
+				.. "get PvP alerts, and see who among us is the poorest.", 0)
+			Text(page, "Three short steps: what you share, your characters, and alerts. Everything can be changed later under Options.", -58)
+			page.audience = Text(page, "", -108, "GameFontDisable")
+		end,
+		show = function(page)
+			local total = P.AddonAudience()
+			page.audience:SetText(total > 0
+				and ("%d guildmate%s already use it. What you post in the addon reaches them; the Roster tab shows who."):format(total, total == 1 and "" or "s")
+				or "You are among the first in the guild to use it. What you post in the addon reaches members who have it; the Roster tab shows who.")
 		end,
 	},
 	{
-		title = "Your gold",
+		title = "What you share",
 		build = function(page)
-			Text(page, "The Poorest tab ranks the guild by how little gold everyone has. To be on it, your characters' gold "
-				.. "is sent to guildmates who use the addon.", 0)
-			Option(page, "share", "Share my gold and put me on the leaderboard", -64, function(on)
+			Text(page, "Two things are yours to decide. Both are off unless you tick them.", 0)
+			Option(page, "share", "My gold, to be ranked on the Poorest leaderboard", -34, function(on)
 				if on and P.started then P.SendGoldSoon() end
 			end)
-			Text(page, "Left unticked, nobody sees your gold. You can still look at the board.", -92, "GameFontDisable")
+			Option(page, "shareShame", "My deaths and repair bills, for the Shame tab", -58, function(on)
+				if on and P.started then P.Report("shame") end
+			end)
+			Text(page, "Shared with guildmates who use the addon without asking, because the features need it: your professions and "
+				.. "recipes, your level and progress to the next, and which characters are your alts.", -96, "GameFontDisable")
+			Text(page, "Nothing leaves the guild, and members without the addon see none of it.", -150, "GameFontDisable")
 		end,
 		leave = function()
 			P.db.opts.shareAsked = true
@@ -63,61 +74,24 @@ local STEPS = {
 	},
 	{
 		title = "Your characters",
-		build = function(page)
-			Text(page, "If the character you are on is an alt, name your main. Alts are counted together with their main "
-				.. "on the leaderboard and as one donor on funds.", 0)
-			local label = Label(page, "My main is", "GameFontNormalSmall")
-			label:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -70)
-			page.main = EditBox(page, 200, 40)
-			page.main:SetPoint("LEFT", label, "RIGHT", 10, 0)
-			Text(page, "Leave it empty if this character is your main. It applies to every character of yours that has logged in with the addon.",
-				-100, "GameFontDisable")
-			page.problem = Text(page, "", -146)
-			page.problem:SetTextColor(1, 0.35, 0.3)
-		end,
-		show = function(page)
-			local main = P.MainOf(P.me)
-			page.main:SetText(main ~= P.me and P.ShortName(main) or "")
-			page.problem:SetText("")
-		end,
-		leave = function(page)
-			local typed = strtrim(page.main:GetText() or "")
-			local main = typed ~= "" and P.ResolveName(typed) or nil
-			if main == P.me then main = nil end
-			-- Nothing typed and nothing linked: leave things as they are.
-			if not main and P.MainOf(P.me) == P.me then return true end
-			if main == P.MainOf(P.me) then return true end
-			local ok, err = P.SetMyMain(main)
-			if not ok then
-				page.problem:SetText(err .. " Check the spelling, or clear the box to go on.")
-				return false
-			end
-			return true
-		end,
-	},
-	{
-		title = "PvP alerts",
-		build = function(page)
-			Text(page, "Anyone can tell the guild where a fight is with one button. Choose what happens when someone does.", 0)
-			Option(page, "alerts", "Tell me when a guildmate sends a PvP alert", -40)
-			Option(page, "alertZoneOnly", "Sound and on-screen warning only for my own zone", -64)
-			Option(page, "alertPin", "Pin the place on my map (replaces a pin I had set)", -88)
-			Option(page, "alertChat", "When I send one, post it in guild chat too", -112)
-			Text(page, "Send an alert with the red button in the window, with |cffffffff/poor pvp|r, or with a key you set under "
-				.. "Options > Keybindings > poor.", -142, "GameFontDisable")
-		end,
-	},
-	{
-		title = "Your professions",
 		live = true,
 		build = function(page)
-			page.intro = Text(page, "", 0)
+			Text(page, "If this character is an alt, name your main, so the guild counts you once.", 0)
+			local label = Label(page, "My main is", "GameFontNormalSmall")
+			label:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -34)
+			page.main = EditBox(page, 190, 40)
+			page.main:SetPoint("LEFT", label, "RIGHT", 10, 0)
+			local note = Label(page, "(empty = this one)", "GameFontDisable")
+			note:SetPoint("LEFT", page.main, "RIGHT", 10, 0)
+			page.problem = Text(page, "", -58)
+			page.problem:SetTextColor(1, 0.35, 0.3)
+			page.intro = Text(page, "", -84)
 			page.rows = {}
-			for i = 1, 6 do
+			for i = 1, 5 do
 				local row = CreateFrame("Frame", nil, page)
-				row:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -50 - (i - 1) * 24)
-				row:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -50 - (i - 1) * 24)
-				row:SetHeight(22)
+				row:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -126 - (i - 1) * 23)
+				row:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -126 - (i - 1) * 23)
+				row:SetHeight(21)
 				row.name = Label(row)
 				row.name:SetPoint("LEFT", row, "LEFT", 0, 0)
 				row.name:SetWidth(150)
@@ -129,7 +103,13 @@ local STEPS = {
 				page.rows[i] = row
 			end
 		end,
-		show = function(page)
+		show = function(page, first)
+			-- Only when the step comes up, not on each redraw: the box may be being typed in.
+			if first then
+				local main = P.MainOf(P.me)
+				page.main:SetText(main ~= P.me and P.ShortName(main) or "")
+				page.problem:SetText("")
+			end
 			local profs, missing = P.MyProfessions(), 0
 			for i, row in ipairs(page.rows) do
 				local p = profs[i]
@@ -147,24 +127,40 @@ local STEPS = {
 				end
 			end
 			if #profs == 0 then
-				page.intro:SetText("This character has no professions yet. When it learns one, its recipes are shared with the guild "
-					.. "so members can find who can craft what.")
+				page.intro:SetText("No professions on this character yet. When it learns one, guildmates can find it under Crafters.")
 			elseif missing == 0 then
-				page.intro:SetText("Your recipes are shared, so guildmates can find you when they need something made. Nothing to do here.")
+				page.intro:SetText("Your recipes are shared, so guildmates can find you when they need something made.")
 			else
-				page.intro:SetText("Guildmates can look up who can craft what. Press Open on each profession marked \"not read yet\" "
-					.. "and its recipes are picked up within a few seconds. Gathering skills have none.")
+				page.intro:SetText("Guildmates look up who can craft what. Press Open on a profession marked \"not read yet\" "
+					.. "and it is picked up in a few seconds. Gathering skills have nothing to read.")
 			end
+		end,
+		leave = function(page)
+			local typed = strtrim(page.main:GetText() or "")
+			local main = typed ~= "" and P.ResolveName(typed) or nil
+			if main == P.me then main = nil end
+			-- Nothing typed and nothing linked: leave things as they are.
+			if not main and P.MainOf(P.me) == P.me then return true end
+			if main == P.MainOf(P.me) then return true end
+			local ok, err = P.SetMyMain(main)
+			if not ok then
+				page.problem:SetText(err .. " Check the spelling, or clear the box to go on.")
+				return false
+			end
+			return true
 		end,
 	},
 	{
-		title = "All set",
+		title = "Alerts",
 		build = function(page)
-			Text(page, "That is everything. A few things worth knowing:", 0)
-			Text(page, "- Recipes you learn later are added automatically.\n"
-				.. "- Events, funds and lotteries appear on their tabs as officers create them.\n"
-				.. "- Only guildmates who have the addon see what you share.", -28)
-			Text(page, "Run this again with |cffffffff/poor setup|r.", -112, "GameFontDisable")
+			Text(page, "What the addon tells you about while you play.", 0)
+			Option(page, "groupNotify", "A guildmate is looking for a group near my level", -30)
+			Option(page, "alerts", "A guildmate sends a PvP alert", -54)
+			Option(page, "alertZoneOnly", "Sound and on-screen warning only for PvP in my own zone", -78)
+			Option(page, "alertPin", "Pin a PvP alert on my map (replaces a pin I had set)", -102)
+			Option(page, "alertChat", "When I send a PvP alert, post it in guild chat too", -126)
+			Text(page, "Send a PvP alert with the red button in the window, |cffffffff/poor pvp|r, or a key set under "
+				.. "Options > Keybindings > poor. Finish opens the window; |cffffffff/poor setup|r brings this back.", -160, "GameFontDisable")
 		end,
 	},
 }
@@ -174,13 +170,14 @@ local function Show(index)
 	for i, page in ipairs(pages) do page:SetShown(i == index) end
 	local def, page = STEPS[index], pages[index]
 	for key, check in pairs(page.options or {}) do check:SetChecked(P.db.opts[key]) end
-	if def.show then def.show(page) end
+	if def.show then def.show(page, true) end
 	frame.title:SetText(def.title)
-	frame.count:SetText(("%d of %d"):format(index, #STEPS))
-	frame.back:SetShown(index > 1)
-	frame.skip:SetShown(index < #STEPS)
-	frame.next:SetText(index == #STEPS and "Finish" or "Next")
+	frame.count:SetText(single and "" or ("%d of %d"):format(index, #STEPS))
+	frame.back:SetShown(index > 1 and not single)
+	frame.skip:SetShown(index < #STEPS and not single)
+	frame.next:SetText((single and "Done") or (index == #STEPS and "Finish") or "Next")
 	for i, dot in ipairs(frame.dots) do
+		dot:SetShown(not single)
 		if i <= index then dot:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 1) else dot:SetColorTexture(1, 1, 1, 0.15) end
 	end
 end
@@ -250,7 +247,14 @@ local function Build()
 	f.next = Button(f, "Next", 84, function()
 		if not Leave() then return end
 		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-		if step == #STEPS then f:Hide() else Show(step + 1) end
+		if single then
+			f:Hide()
+		elseif step == #STEPS then
+			f:Hide()
+			P.OpenWindow() -- land on something, not on an empty screen
+		else
+			Show(step + 1)
+		end
 	end)
 	f.next:SetHeight(24)
 	f.next:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PAD, 14)
@@ -259,35 +263,59 @@ local function Build()
 	f.back:SetPoint("RIGHT", f.next, "LEFT", -6, 0)
 
 	-- Finished, skipped or closed with Escape: either way it does not come back by itself.
-	f:SetScript("OnHide", function() P.db.opts.wizardDone = true end)
+	f:SetScript("OnHide", function()
+		P.db.opts.wizardDone = true
+		P.db.wizardChars[P.me] = true
+	end)
 	tinsert(UISpecialFrames, "PoorWizardFrame")
 	return f
 end
 
-function P.ShowWizard()
+function P.ShowWizard(onlyStep)
 	if not P.EnsureStarted() then return P.Print(P.WhyNotReady()) end
 	frame = frame or Build()
-	Show(1)
+	single = onlyStep ~= nil
+	Show(onlyStep or 1)
 	frame:Show()
 end
 
--- Offered once, a few seconds after the addon first starts in the guild, and
--- never in the middle of a fight.
+local CHARACTERS_STEP = 3
+
+--- A character of an account that already did the setup: is there anything
+--- on the "Your characters" step still to do for it?
+local function AltNeedsSetup()
+	local others = 0
+	for char in pairs(P.db.myChars) do
+		if char ~= P.me then others = others + 1 end
+	end
+	if others > 0 and P.db.mains[P.me] == nil then return true end -- never said whose alt it is
+	for _, p in ipairs(P.MyProfessions()) do
+		if not p.recipes and not p.catalogue then return true end
+	end
+	return false
+end
+
+-- Offered once per account in full, a few seconds after the addon first
+-- starts in the guild; and once per further character, just the step about
+-- that character. Never in the middle of a fight.
 local function Offer()
-	if P.db.opts.wizardDone then return end
 	if InCombatLockdown and InCombatLockdown() then return C_Timer.After(15, Offer) end
-	P.ShowWizard()
+	if not P.db.opts.wizardDone then return P.ShowWizard() end
+	if P.db.wizardChars[P.me] then return end
+	P.db.wizardChars[P.me] = true
+	if AltNeedsSetup() then P.ShowWizard(CHARACTERS_STEP) end
 end
 
 -- Keep the professions step current while it is on screen: recipes arrive a
 -- moment after a profession window opens.
 local function Live()
 	-- Only that step: redrawing the others would wipe what is being typed.
-	if frame and frame:IsShown() and STEPS[step].live then STEPS[step].show(pages[step]) end
+	if frame and frame:IsShown() and STEPS[step].live then STEPS[step].show(pages[step], false) end
 end
 P.On("Blob", Live)
 P.On("Crafts", Live)
 
 P.On("Started", function()
-	if not P.db.opts.wizardDone then C_Timer.After(4, Offer) end
+	-- The full setup soon; the per-character step later, once professions are read.
+	C_Timer.After(P.db.opts.wizardDone and 20 or 4, Offer)
 end)

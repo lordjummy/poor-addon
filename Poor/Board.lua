@@ -4,14 +4,15 @@
 -- the lender marks it repaid.
 --
 --   db.board[id] = { id, rev, state, author, helper, created, ts, amount, loan, text }
---   state: "O" open, "C" someone offered, "R" received, "P" repaid, "X" deleted
+--   state: "O" open, "C" someone offered, "R" received, "Q" borrower says repaid
+--          (waiting for the lender), "P" repaid, "X" deleted
 --
 -- Wire (compatible addition): B^id^rev^state^author^helper^created^amount^loan^text
 local _, P = ...
 
 local DAY = 86400
 P.BOARD_TEXT_MAX = 80
-local STATES = { O = true, C = true, R = true, P = true, X = true }
+local STATES = { O = true, C = true, R = true, Q = true, P = true, X = true }
 
 local function Line(r)
 	return ("B^%s^%d^%s^%s^%s^%d^%d^%d^%s"):format(r.id, r.rev, r.state, r.author, r.helper or "",
@@ -20,7 +21,7 @@ end
 
 --- An outstanding loan: received, to be paid back, with an amount.
 function P.IsDebt(r)
-	return r.state == "R" and r.loan and (r.amount or 0) > 0
+	return (r.state == "R" or r.state == "Q") and r.loan and (r.amount or 0) > 0
 end
 
 --- Requests worth showing: open, offered, and unpaid loans. Newest first.
@@ -111,8 +112,18 @@ function P.MarkRepaid(id)
 		function(r) r.state = "P" end)
 end
 
+--- The borrower says the loan is paid back; the lender still confirms it.
+function P.ClaimRepaid(id)
+	return Change(id, function(r) return r.state == "R" and P.IsDebt(r) and r.author == P.me end,
+		function(r) r.state = "Q" end)
+end
+
+--- The asker can take a request down until the help has arrived. After that
+--- it is a record (and maybe a debt) and only an officer can remove it, which
+--- is also how a debt to someone who left the guild gets cleared.
 function P.CanDeleteRequest(r)
-	return r.author == P.me or P.AmOfficer()
+	if P.AmOfficer() then return true end
+	return r.author == P.me and (r.state == "O" or r.state == "C")
 end
 
 function P.DeleteRequest(id)
@@ -137,12 +148,15 @@ P.handlers.B = function(_, id, rev, state, author, helper, created, amount, loan
 	P.Fire("Board")
 	if P.Syncing() or before == state then return end
 	if state == "O" and not before then
+		if not P.db.opts.boardNotify then return end
 		P.Print(("%s is asking: %s. /poor to help."):format(P.ShortName(author), Describe(r)))
 	elseif state == "C" and author == P.me then
 		P.Print(("%s offers to help with %s."):format(P.ShortName(r.helper or "?"), Describe(r)))
 	elseif state == "R" and r.helper == P.me then
 		P.Print(("%s received your help with %s.%s"):format(P.ShortName(author), Describe(r),
 			P.IsDebt(r) and " It stays on the ledger until you mark it repaid." or ""))
+	elseif state == "Q" and r.helper == P.me then
+		P.Print(("%s says the loan is paid back: %s. Confirm it on the Board tab."):format(P.ShortName(author), Describe(r)))
 	elseif state == "P" and author == P.me then
 		P.Print(("%s marked your loan as repaid: %s."):format(P.ShortName(r.helper or "?"), Describe(r)))
 	end

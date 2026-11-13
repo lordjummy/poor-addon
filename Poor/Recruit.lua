@@ -51,7 +51,7 @@ end
 -- What the officers want recruited
 ---------------------------------------------------------------------------
 local function Line(r)
-	return ("K^%d^%s^%d^%s^%s^%d"):format(r.rev, r.by or "", r.min or 0, r.classes or "", r.pitch or "", r.officersOnly and 1 or 0)
+	return ("K^%d^%s^%d^%s^%s^%d"):format(r.rev, r.by or "", r.min or 0, r.classes or "", r.pitch or "", r.officersOnly == false and 0 or 1)
 end
 
 function P.Recruit()
@@ -120,10 +120,16 @@ function P.SetWanted(token, wanted)
 	end)
 end
 
+--- Recruiting is the officers' job unless they open it to everyone:
+--- messaging strangers on the guild's behalf is not something to hand out
+--- by default.
+function P.RecruitRestricted()
+	return P.db.recruit.officersOnly ~= false
+end
+
 --- Whether this player may search for and pitch to players from the addon.
---- Officers can keep recruiting to themselves.
 function P.CanRecruit()
-	return not P.db.recruit.officersOnly or P.AmOfficer()
+	return not P.RecruitRestricted() or P.AmOfficer()
 end
 
 function P.SetOfficersOnly(on)
@@ -145,10 +151,11 @@ P.handlers.K = function(sender, rev, by, min, classes, pitch, only)
 	r.rev, r.by, r.min = rev, (by and by ~= "") and by or sender, tonumber(min) or 0
 	r.classes = (classes or ""):gsub("[^%u,]", "")
 	r.pitch = P.Clean(pitch, P.PITCH_MAX)
-	r.officersOnly = only == "1"
+	r.officersOnly = only ~= "0"
 	P.Fire("Recruit")
 	if r.classes ~= before and r.classes ~= "" and not P.Syncing() then
-		P.Print(("The guild is recruiting: |cffffffff%s|r. The Recruit tab helps you find them."):format(P.WantedText()))
+		P.Print(("The guild is recruiting: |cffffffff%s|r. %s"):format(P.WantedText(),
+			P.CanRecruit() and "The Recruit tab helps you find them." or "Know someone who would fit? Tell an officer."))
 	end
 end
 
@@ -297,10 +304,18 @@ end
 
 --- Open a whisper to a candidate with the pitch typed in. Nothing is sent
 --- until the player presses Enter.
+-- A player counts as approached when the whisper is really sent, not when
+-- the chat box opens: the game reports each whisper that went out.
+local drafted = {}
+
+local function Plain(name)
+	return (P.StripRealm(tostring(name)):gsub("%-", " "):lower())
+end
+
 function P.PitchTo(candidate)
 	if not P.CanRecruit() then return P.Print("Recruiting is handled by the officers.") end
+	drafted[Plain(candidate.name)] = candidate.name
 	P.ui.Whisper(candidate.name, P.Pitch(candidate.class, candidate))
-	Mark(candidate.name, "whispered")
 end
 
 function P.CanInviteToGuild()
@@ -310,7 +325,10 @@ function P.CanInviteToGuild()
 end
 
 function P.InviteToGuild(candidate)
+	if not P.CanRecruit() then return P.Print("Recruiting is handled by the officers.") end
 	if not P.CanInviteToGuild() then return P.Print("Your rank cannot invite to the guild.") end
+	-- No invites out of the blue: someone has to have talked to them first.
+	if not P.Approached(candidate.name) then return P.Print("Whisper them first, and invite once they have said yes.") end
 	local target = P.FOREVER and P.ShortName(candidate.name) or candidate.name
 	local ok
 	if C_GuildInfo and C_GuildInfo.Invite then
@@ -328,4 +346,15 @@ end
 
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("WHO_LIST_UPDATE")
-frame:SetScript("OnEvent", function() pcall(OnWho) end)
+frame:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
+frame:SetScript("OnEvent", function(_, event, _, target)
+	if event == "WHO_LIST_UPDATE" then
+		pcall(OnWho)
+	elseif P.Readable(target) and target then
+		local name = drafted[Plain(target)]
+		if name then
+			drafted[Plain(target)] = nil
+			Mark(name, "whispered")
+		end
+	end
+end)

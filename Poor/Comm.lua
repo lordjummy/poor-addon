@@ -347,6 +347,7 @@ function P.OnAddonMessage(prefix, msg, channel, sender)
 	P.lastSenderRaw = sender -- for /poor debug: how this client writes sender names
 	sender = P.FullName(sender)
 	if not sender or sender == P.me then return end
+	P.db.addonUsers[sender] = P.Now() -- a message from them means they run the addon
 	if prefix == VERSION_PREFIX then return OnVersion(sender, msg) end
 	local cmd, rest = msg:match("^(%u)%^(.*)$")
 	local handler = cmd and handlers[cmd]

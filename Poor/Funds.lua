@@ -157,8 +157,8 @@ end
 -- Wire
 ---------------------------------------------------------------------------
 local function FundLine(f)
-	return ("F^%s^%d^%d^%d^%s^%s^%d^%s^%d^%d"):format(f.id, f.rev, f.goal, f.deleted and 2 or (f.closed and 1 or 0),
-		f.collector, f.title, f.price or 0, f.winner or "", f.winTicket or 0, f.winOf or 0)
+	return ("F^%s^%d^%d^%d^%s^%s^%d^%s^%d^%d^%d"):format(f.id, f.rev, f.goal, f.deleted and 2 or (f.closed and 1 or 0),
+		f.collector, f.title, f.price or 0, f.winner or "", f.winTicket or 0, f.winOf or 0, f.paid and 1 or 0)
 end
 
 local function SendFund(f)
@@ -195,7 +195,7 @@ function P.SyncFunds()
 	end
 end
 
-function P.OnFund(id, rev, goal, flag, collector, title, price, winner, ticket, of)
+function P.OnFund(id, rev, goal, flag, collector, title, price, winner, ticket, of, paid)
 	local seen = P.Syncing()
 	rev, goal = tonumber(rev), tonumber(goal)
 	if not id or id == "" or not rev or not goal or not collector or not title then return end
@@ -210,7 +210,12 @@ function P.OnFund(id, rev, goal, flag, collector, title, price, winner, ticket, 
 	f.price = (tonumber(price) or 0) > 0 and tonumber(price) or nil
 	f.winner = (winner and winner ~= "") and winner or nil
 	f.winTicket, f.winOf = tonumber(ticket) or 0, tonumber(of) or 0
+	local wasPaid = f.paid
+	f.paid = paid == "1"
 	P.db.funds[id] = f
+	if f.paid and not wasPaid and not seen and f.winner and f.collector == P.me then
+		P.Print(("%s confirmed receiving the pot of |cffffffff%s|r."):format(P.ShortName(f.winner), f.title))
+	end
 	P.Fire("Funds")
 	if seen or f.deleted then return end
 	if f.winner and not hadWinner then
@@ -335,8 +340,34 @@ function P.DrawLottery(id)
 	return winner
 end
 
+--- Gold is at stake once anything was paid in. Then only the keeper, who
+--- holds it, can delete; and a drawn lottery only after the winner was paid.
+function P.CanDeleteFund(f)
+	if not P.CanManageFund(f) then return false end
+	if P.FundTotal(f) == 0 then return true end
+	if f.winner and not f.paid then return false, "The winner has not confirmed the payout yet." end
+	if f.collector ~= P.me then return false, "It holds gold. Only " .. P.ShortName(f.collector) .. ", who has it, can delete it." end
+	return true
+end
+
 function P.DeleteFund(id)
-	return ChangeFund(id, function(f) f.deleted = true end)
+	local f = P.db.funds[id]
+	if not f then return nil end
+	local ok, why = P.CanDeleteFund(f)
+	if not ok then return nil, why end
+	return ChangeFund(id, function(fund) fund.deleted = true end)
+end
+
+--- The winner of a lottery says the pot arrived. Not the organiser: the
+--- point is that someone other than the holder of the gold confirms it.
+function P.ConfirmPayout(id)
+	local f = P.db.funds[id]
+	if not f or f.deleted or not f.winner or f.paid then return nil end
+	if P.MainOf(P.me) ~= f.winner and P.me ~= f.winner then return nil, "Only the winner confirms the payout." end
+	f.paid, f.rev, f.ts = true, f.rev + 1, P.Now()
+	P.Send(FundLine(f))
+	P.Fire("Funds")
+	return f
 end
 
 function P.AddDonation(id, name, copper, how)
@@ -345,6 +376,11 @@ function P.AddDonation(id, name, copper, how)
 	if not P.CanManageFund(f) then return nil, "Only the collector or an officer can record donations." end
 	if not name then return nil, "Who gave it?" end
 	if not copper or copper <= 0 then return nil, "Amount must be gold, like 5 or 2g 50s." end
+	-- Whoever holds the pot and draws the ticket does not also hold tickets.
+	if f.price and P.MainOf(name) == P.MainOf(f.collector) then
+		return nil, "The organiser of a lottery cannot hold tickets in it."
+	end
+	if f.winner then return nil, "That lottery is already drawn." end
 	local eid = NewId()
 	f.entries[eid] = { name = name, copper = copper, ts = P.Now(), how = how or "H", deleted = false }
 	SendDonations(f, eid)
