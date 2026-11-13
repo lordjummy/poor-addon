@@ -864,71 +864,69 @@ end
 -- Tab 4: Funds
 ---------------------------------------------------------------------------
 local function BuildFunds(panel)
+	local SIDE = 190             -- width of the list of funds on the left
 	local current, selectedEntry -- fund id, donation id
-	local byDonor = false        -- list shows totals per person instead of single donations
+	local byDonor = false        -- list shows totals per person instead of single payments
 
-	-- Line 1: which fund, and how far along it is
-	local prev = Button(panel, "<", 22, function() panel:Step(-1) end)
-	prev:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -62)
-	local nextButton = Button(panel, ">", 22, function() panel:Step(1) end)
-	nextButton:SetPoint("LEFT", prev, "RIGHT", 2, 0)
-	local name = Label(panel, nil, "GameFontNormal")
-	name:SetPoint("LEFT", nextButton, "RIGHT", 8, 0)
-	name:SetWidth(330)
-	local progress = Label(panel)
-	progress:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -28, -66)
-	progress:SetWidth(250)
-	progress:SetJustifyH("RIGHT")
+	-- Left: every fund and lottery, one click to switch -------------------
+	local side = CreateFrame("Frame", nil, panel)
+	side:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+	side:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 0)
+	side:SetWidth(SIDE)
+	local divider = side:CreateTexture(nil, "ARTWORK")
+	divider:SetColorTexture(COLOR.line[1], COLOR.line[2], COLOR.line[3], COLOR.line[4])
+	divider:SetWidth(1)
+	divider:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, -58)
+	divider:SetPoint("BOTTOMRIGHT", side, "BOTTOMRIGHT", 0, 62)
 
-	local bar = CreateFrame("StatusBar", nil, panel)
-	bar:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -88)
-	bar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -28, -88)
-	bar:SetHeight(12)
-	bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
-	bar:SetStatusBarColor(ACCENT[1], ACCENT[2], ACCENT[3])
-	bar:SetMinMaxValues(0, 1)
-	local barBack = bar:CreateTexture(nil, "BACKGROUND")
-	barBack:SetAllPoints(bar)
-	barBack:SetColorTexture(0, 0, 0, 0.5)
+	local picker = List(side, { { "Funds and lotteries", 106 }, { "", 42, "RIGHT" } }, function(row, f)
+		local total = P.FundTotal(f)
+		local gold = math.floor(total / 10000)
+		row.cells[1]:SetText((f.price and "|cffffd100" or "|cffffffff") .. f.title .. "|r")
+		row.cells[2]:SetText(gold > 0 and (gold .. "g") or P.MoneyShort(total))
+		row.selection:SetShown(f.id == current)
+		row.mark:SetShown(f.id == current)
+		row:SetAlpha(f.closed and 0.55 or 1)
+	end, function(row)
+		row.selection = Fill(row, "BACKGROUND", { 1, 1, 1, 0.08 })
+		row.mark = row:CreateTexture(nil, "ARTWORK")
+		row.mark:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 1)
+		row.mark:SetPoint("TOPLEFT")
+		row.mark:SetPoint("BOTTOMLEFT")
+		row.mark:SetWidth(2)
+		row:SetScript("OnClick", function(self)
+			if self.data.id == current then return end
+			current, selectedEntry = self.data.id, nil
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+			panel:Refresh()
+		end)
+		row:SetScript("OnEnter", function(self)
+			local f = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(f.title)
+			GameTooltip:AddLine(P.FundStatusText(f), 1, 1, 1, true)
+			GameTooltip:AddLine((f.price and "Lottery" or "Fund") .. (f.closed and ", closed" or ", open") .. ", run by " .. P.ShortName(f.collector), 0.6, 0.6, 0.6)
+			GameTooltip:Show()
+		end)
+	end, -78, 62)
 
-	-- Line 2: the collector's tools
-	local manage = CreateFrame("Frame", nil, panel)
-	manage:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -106)
-	manage:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -28, -106)
-	manage:SetHeight(22)
-	local donorLabel = Label(manage, "Donor", "GameFontNormalSmall")
-	donorLabel:SetPoint("LEFT", manage, "LEFT", 0, 0)
-	local donorBox = EditBox(manage, 110, 40)
-	donorBox:SetPoint("LEFT", donorLabel, "RIGHT", 10, 0)
-	local goldLabel = Label(manage, "Gold", "GameFontNormalSmall")
-	goldLabel:SetPoint("LEFT", donorBox, "RIGHT", 8, 0)
-	local goldBox = EditBox(manage, 64, 16)
-	goldBox:SetPoint("LEFT", goldLabel, "RIGHT", 10, 0)
-	local add = Button(manage, "Add", 46, function()
-		local ok, err = P.AddDonation(current, P.ResolveName(donorBox:GetText()), P.ParseMoney(goldBox:GetText()), "H")
-		if not ok then return P.Print(err) end
-		donorBox:SetText("")
-		goldBox:SetText("")
-		donorBox:SetFocus()
-	end)
-	add:SetPoint("LEFT", goldBox, "RIGHT", 6, 0)
-	goldBox:SetScript("OnEnterPressed", function() add:Click() end)
-	local remove = Button(manage, "Remove", 62, function()
-		if not selectedEntry then return P.Print("Click a donation in the list first.") end
-		if not IsShiftKeyDown() then return P.Print("Shift-click Remove to delete the selected donation.") end
-		P.RemoveDonation(current, selectedEntry)
-		selectedEntry = nil
-	end)
-	remove:SetPoint("LEFT", add, "RIGHT", 4, 0)
+	-- Right: the chosen one ----------------------------------------------
+	local detail = CreateFrame("Frame", nil, panel)
+	detail:SetPoint("TOPLEFT", panel, "TOPLEFT", SIDE, 0)
+	detail:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
 
-	local delete = Button(manage, "Delete", 54, function()
+	-- Line 1: its name, and what its keeper can do with it
+	local name = Label(detail, nil, "GameFontNormal")
+	name:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -63)
+	name:SetWidth(250)
+	local delete = Button(detail, "Delete", 54, function()
 		local f = P.db.funds[current or ""]
 		if not f then return end
-		if not IsShiftKeyDown() then return P.Print("Shift-click Delete to remove the fund \"" .. f.title .. "\" for everyone.") end
+		if not IsShiftKeyDown() then return P.Print("Shift-click Delete to remove \"" .. f.title .. "\" for everyone.") end
 		P.DeleteFund(current)
 	end)
-	delete:SetPoint("RIGHT", manage, "RIGHT", 0, 0)
-	local close = Button(manage, "Close", 62, function()
+	delete:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -62)
+	local close = Button(detail, "Close", 58, function()
 		local f = P.db.funds[current or ""]
 		if not f then return end
 		if f.price then
@@ -941,54 +939,97 @@ local function BuildFunds(panel)
 		end
 	end)
 	close:SetPoint("RIGHT", delete, "LEFT", -4, 0)
-	local announce = Button(manage, "Announce", 74, function()
+	local announce = Button(detail, "Announce", 72, function()
 		if current then P.AnnounceFund(current) end
 	end)
 	announce:SetPoint("RIGHT", close, "LEFT", -4, 0)
 	announce:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:AddLine("Post the fund's progress in guild chat", 1, 1, 1)
+		GameTooltip:AddLine("Post the progress in guild chat", 1, 1, 1)
 		GameTooltip:Show()
 	end)
 	announce:SetScript("OnLeave", GameTooltip_Hide)
 
-	-- Donations
-	local list = List(panel, {
-		{ "When", 110 }, { "Donor", 170 }, { "Amount", 130, "RIGHT" }, { "", 12 }, { "Received", 100 },
+	-- Line 2: how far along it is, and the choice of what the list shows
+	local progress = Label(detail)
+	progress:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -88)
+	progress:SetWidth(330)
+	local view = Button(detail, "", 110, function()
+		byDonor = not byDonor
+		selectedEntry = nil
+		panel:Refresh()
+	end)
+	view:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -84)
+
+	local bar = CreateFrame("StatusBar", nil, detail)
+	bar:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -108)
+	bar:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -108)
+	bar:SetHeight(8)
+	bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+	bar:SetStatusBarColor(ACCENT[1], ACCENT[2], ACCENT[3])
+	bar:SetMinMaxValues(0, 1)
+	Fill(bar, "BACKGROUND", { 0, 0, 0, 0.5 })
+
+	-- Line 3: the keeper records a payment by hand
+	local manage = CreateFrame("Frame", nil, detail)
+	manage:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -122)
+	manage:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -122)
+	manage:SetHeight(22)
+	local donorLabel = Label(manage, "Donor", "GameFontNormalSmall")
+	donorLabel:SetPoint("LEFT", manage, "LEFT", 0, 0)
+	local donorBox = EditBox(manage, 104, 40)
+	donorBox:SetPoint("LEFT", donorLabel, "RIGHT", 8, 0)
+	local goldLabel = Label(manage, "Gold", "GameFontNormalSmall")
+	goldLabel:SetPoint("LEFT", donorBox, "RIGHT", 8, 0)
+	local goldBox = EditBox(manage, 60, 16)
+	goldBox:SetPoint("LEFT", goldLabel, "RIGHT", 8, 0)
+	local add = Button(manage, "Add", 44, function()
+		local ok, err = P.AddDonation(current, P.ResolveName(donorBox:GetText()), P.ParseMoney(goldBox:GetText()), "H")
+		if not ok then return P.Print(err) end
+		donorBox:SetText("")
+		goldBox:SetText("")
+		donorBox:SetFocus()
+	end)
+	add:SetPoint("LEFT", goldBox, "RIGHT", 6, 0)
+	goldBox:SetScript("OnEnterPressed", function() add:Click() end)
+	local remove = Button(manage, "Remove", 60, function()
+		if not selectedEntry then return P.Print("Click a payment in the list first.") end
+		if not IsShiftKeyDown() then return P.Print("Shift-click Remove to delete the selected payment.") end
+		P.RemoveDonation(current, selectedEntry)
+		selectedEntry = nil
+	end)
+	remove:SetPoint("LEFT", add, "RIGHT", 4, 0)
+
+	-- Payments
+	local list = List(detail, {
+		{ "When", 92 }, { "Donor", 124 }, { "Amount", 96, "RIGHT" }, { "", 8 }, { "Received", 104 },
 	}, function(row, d)
 		local c = row.cells
-		c[1]:SetText(date("%a %d %b %H:%M", d.ts or d.last))
+		c[1]:SetText(date("%d %b %H:%M", d.ts or d.last))
 		c[2]:SetText(ClassName(d.name))
 		c[3]:SetText(P.MoneyIcons(d.copper))
 		c[5]:SetText(d.tickets or (d.count and (d.count .. (d.count == 1 and " donation" or " donations"))) or P.HOW_TEXT[d.how] or "")
 		row.selection:SetShown(d.eid ~= nil and d.eid == selectedEntry)
 	end, function(row)
-		row.selection = row:CreateTexture(nil, "BACKGROUND")
-		row.selection:SetAllPoints(row)
-		row.selection:SetColorTexture(0.72, 0.45, 0.2, 0.25)
+		row.selection = Fill(row, "BACKGROUND", { ACCENT[1], ACCENT[2], ACCENT[3], 0.25 })
 		row:SetScript("OnClick", function(self)
 			if not self.data.eid then return end -- per-donor totals cannot be selected
 			selectedEntry = self.data.eid ~= selectedEntry and self.data.eid or nil
 			panel:Refresh()
 		end)
-	end, -152, 62)
+	end, -168, 62)
 
-	local view = Button(panel, "", 110, function()
-		byDonor = not byDonor
-		selectedEntry = nil
-		panel:Refresh()
-	end)
-	view:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -28, -130)
-
+	local listEmpty = Label(detail, nil, "GameFontDisable")
+	listEmpty:SetPoint("CENTER", detail, "CENTER", -10, -50)
 	local empty = Label(panel, nil, "GameFontDisable")
-	empty:SetPoint("CENTER", panel, "CENTER", 0, -30)
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
 
-	-- Bottom: open a new fund (officers)
+	-- Bottom: open a new one (officers) -----------------------------------
 	local create = CreateFrame("Frame", nil, panel)
 	create:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 32)
 	create:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 32)
 	create:SetHeight(22)
-	local newLabel = Label(create, "New fund", "GameFontNormalSmall")
+	local newLabel = Label(create, "New", "GameFontNormalSmall")
 	newLabel:SetPoint("LEFT", create, "LEFT", 0, 0)
 	local newTitle = EditBox(create, 200, P.FUND_TITLE_MAX)
 	newTitle:SetPoint("LEFT", newLabel, "RIGHT", 10, 0)
@@ -996,16 +1037,20 @@ local function BuildFunds(panel)
 	goalLabel:SetPoint("LEFT", newTitle, "RIGHT", 10, 0)
 	local goalBox = EditBox(create, 64, 16)
 	goalBox:SetPoint("LEFT", goalLabel, "RIGHT", 10, 0)
-	local createButton = Button(create, "Open fund", 80, function()
-		local goalText = goalBox:GetText()
-		local f, err = P.CreateFund(newTitle:GetText(), goalText == "" and 0 or P.ParseMoney(goalText))
-		if not f then return P.Print(err) end
-		current, selectedEntry = f.id, nil
+
+	local function Opened(f, asLottery)
+		current, selectedEntry, byDonor = f.id, nil, asLottery
 		newTitle:SetText("")
 		goalBox:SetText("")
 		newTitle:ClearFocus()
 		goalBox:ClearFocus()
 		panel:Refresh()
+	end
+	local createButton = Button(create, "Open fund", 80, function()
+		local goalText = goalBox:GetText()
+		local f, err = P.CreateFund(newTitle:GetText(), goalText == "" and 0 or P.ParseMoney(goalText))
+		if not f then return P.Print(err) end
+		Opened(f, false)
 	end)
 	createButton:SetPoint("LEFT", goalBox, "RIGHT", 8, 0)
 	createButton:SetScript("OnEnter", function(self)
@@ -1018,12 +1063,7 @@ local function BuildFunds(panel)
 	local lotteryButton = Button(create, "Open lottery", 90, function()
 		local f, err = P.CreateFund(newTitle:GetText(), nil, P.ParseMoney(goalBox:GetText()) or 0)
 		if not f then return P.Print(err) end
-		current, selectedEntry, byDonor = f.id, nil, true
-		newTitle:SetText("")
-		goalBox:SetText("")
-		newTitle:ClearFocus()
-		goalBox:ClearFocus()
-		panel:Refresh()
+		Opened(f, true)
 	end)
 	lotteryButton:SetPoint("LEFT", createButton, "RIGHT", 4, 0)
 	lotteryButton:SetScript("OnEnter", function(self)
@@ -1038,18 +1078,6 @@ local function BuildFunds(panel)
 	local footer = Label(panel, nil, "GameFontNormalSmall")
 	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
 
-	function panel:Step(by)
-		local funds = P.FundList()
-		if #funds == 0 then return end
-		local at = 1
-		for i, f in ipairs(funds) do
-			if f.id == current then at = i end
-		end
-		current = funds[(at - 1 + by) % #funds + 1].id
-		selectedEntry = nil
-		self:Refresh()
-	end
-
 	function panel:Refresh()
 		local funds = P.FundList()
 		local f
@@ -1058,39 +1086,40 @@ local function BuildFunds(panel)
 		end
 		f = f or funds[1]
 		current = f and f.id or nil
-		-- Gold handed over is offered for the fund the collector is looking at.
+		-- Gold handed over is offered for the fund its keeper is looking at.
 		if f and f.collector == P.me and not f.closed then P.db.activeFund = f.id end
 
 		create:SetShown(P.AmOfficer())
-		prev:SetShown(#funds > 1)
-		nextButton:SetShown(#funds > 1)
-		bar:SetShown(f ~= nil)
-		view:SetShown(f ~= nil)
-		manage:SetShown(f ~= nil and P.CanManageFund(f))
+		side:SetShown(f ~= nil)
+		detail:SetShown(f ~= nil)
+		empty:SetShown(f == nil)
+		picker:SetRows(funds)
 		if not f then
-			name:SetText("")
-			progress:SetText("")
 			footer:SetText("")
-			list:SetRows({})
 			empty:SetText(P.AmOfficer() and "No funds or lotteries yet. Open one below." or "No funds or lotteries. Nothing to collect, nothing to win.")
-			empty:Show()
 			return
 		end
+
+		local manages = P.CanManageFund(f)
+		manage:SetShown(manages)
+		announce:SetShown(manages)
+		delete:SetShown(manages)
 
 		local total, donors, count = P.FundTotal(f)
 		local rows
 		if f.price then
 			-- Lottery
 			local tickets, ticketCount = P.LotteryTickets(f)
-			name:SetText(("%s  |cff999999lottery, %s a ticket, run by %s|r"):format(f.title, P.MoneyIcons(f.price), P.ShortName(f.collector)))
+			name:SetText(f.title)
 			if f.winner then
 				progress:SetText(("|cffffd100Won by %s|r  %s"):format(P.ShortName(f.winner), P.MoneyIcons(total)))
 			else
-				progress:SetText(("Pot %s  %d ticket%s"):format(P.MoneyIcons(total), ticketCount, ticketCount == 1 and "" or "s"))
+				progress:SetText(("Pot %s   %d ticket%s at %s   |cff999999run by %s|r"):format(P.MoneyIcons(total), ticketCount,
+					ticketCount == 1 and "" or "s", P.MoneyIcons(f.price), P.ShortName(f.collector)))
 			end
 			bar:Hide()
 			close:SetText("Draw")
-			close:SetShown(not f.winner)
+			close:SetShown(manages and not f.winner)
 			view:SetText(byDonor and "Show payments" or "Show tickets")
 			if byDonor then
 				rows = P.FundDonors(f)
@@ -1099,35 +1128,39 @@ local function BuildFunds(panel)
 				for _, d in ipairs(rows) do
 					local t = byName[d.name]
 					d.tickets = t and ("%d ticket%s, %d%%%s"):format(t.tickets, t.tickets == 1 and "" or "s",
-						math.floor(t.tickets / ticketCount * 100 + 0.5), f.winner == d.name and "  |cffffd100WINNER|r" or "")
+						math.floor(t.tickets / ticketCount * 100 + 0.5), f.winner == d.name and " |cffffd100WON|r" or "")
 						or "no ticket yet"
 				end
 			else
 				rows = P.FundEntries(f)
 			end
-			empty:SetText("Nobody has entered yet.")
+			list.heads[5]:SetText(byDonor and "Tickets" or "Received")
+			listEmpty:SetText("Nobody has entered yet.")
 			footer:SetText(f.winner
 				and ("Drawn: ticket %d of %d. %s owes %s the pot."):format(f.winTicket, f.winOf, P.ShortName(f.collector), P.ShortName(f.winner))
 				or ("%d payment%s from %d player%s. Winner takes all."):format(count, count == 1 and "" or "s", donors, donors == 1 and "" or "s"))
 		else
-			name:SetText(("%s  |cff999999collected by %s|r"):format(f.title, P.ShortName(f.collector)))
+			name:SetText(f.title)
+			local who = ("   |cff999999collected by %s|r"):format(P.ShortName(f.collector))
 			if f.goal > 0 then
-				progress:SetText(("%s / %s (%d%%)%s"):format(P.MoneyIcons(total), P.MoneyIcons(f.goal),
-					math.floor(total / f.goal * 100), f.closed and "  |cffff4040closed|r" or ""))
+				progress:SetText(("%s / %s (%d%%)%s%s"):format(P.MoneyIcons(total), P.MoneyIcons(f.goal),
+					math.floor(total / f.goal * 100), f.closed and "  |cffff4040closed|r" or "", who))
 				bar:SetValue(math.min(1, total / f.goal))
 			else
-				progress:SetText(P.MoneyIcons(total) .. (f.closed and "  |cffff4040closed|r" or ""))
+				progress:SetText(P.MoneyIcons(total) .. (f.closed and "  |cffff4040closed|r" or "") .. who)
 				bar:SetValue(total > 0 and 1 or 0)
 			end
+			bar:Show()
 			close:SetText(f.closed and "Reopen" or "Close")
-			close:Show()
+			close:SetShown(manages)
 			view:SetText(byDonor and "Show donations" or "Show per donor")
 			rows = byDonor and P.FundDonors(f) or P.FundEntries(f)
-			empty:SetText("No donations yet.")
+			list.heads[5]:SetText(byDonor and "Count" or "Received")
+			listEmpty:SetText("No donations yet.")
 			footer:SetText(("%d donation%s from %d player%s"):format(count, count == 1 and "" or "s", donors, donors == 1 and "" or "s"))
 		end
 		list:SetRows(rows)
-		empty:SetShown(#rows == 0)
+		listEmpty:SetShown(#rows == 0)
 	end
 end
 
