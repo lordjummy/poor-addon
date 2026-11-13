@@ -1314,7 +1314,7 @@ P.tabs = {
 	{ "Funds", BuildFunds },
 }
 P.ui = { Label = Label, Button = Button, EditBox = EditBox, SearchBox = SearchBox, Check = Check, List = List,
-	ClassName = ClassName, Whisper = Whisper }
+	ClassName = ClassName, Whisper = Whisper, Fill = Fill, Border = Border, ACCENT = ACCENT, COLOR = COLOR, FONT_TITLE = FONT_TITLE }
 
 local function SelectTab(index)
 	activeTab = index

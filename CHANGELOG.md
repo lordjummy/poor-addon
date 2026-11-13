@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+
+- A short setup appears the first time the addon runs: sharing your gold, your main character, PvP alerts. `/poor setup` shows it again.
+
 ## 0.9.2
 
 - Sharing your gold is now off by default. The Poorest tab asks once whether you want to join the leaderboard.

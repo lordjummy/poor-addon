@@ -50,6 +50,10 @@ local function Build()
 			end)
 		end
 	end
+	layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Setup"))
+	layout:AddInitializer(CreateSettingsButtonInitializer("First-time setup", "Run again", function()
+		P.ShowWizard()
+	end, "Go through the welcome questions again: sharing your gold, your main character and PvP alerts.", true))
 	layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Window"))
 	layout:AddInitializer(CreateSettingsButtonInitializer("Window position and size", "Reset", function()
 		P.ResetWindow()

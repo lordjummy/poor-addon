@@ -626,7 +626,7 @@ local DEFAULT_OPTS = {
 	combineAlts = true, thankDonors = true,
 	-- Gold is private until the player says otherwise: sharing starts off, and
 	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
-	showOffline = false, share = false, shareAsked = false, minimap = true, angle = 215, greet = true,
+	showOffline = false, share = false, shareAsked = false, wizardDone = false, minimap = true, angle = 215, greet = true,
 	alerts = true, alertPin = true, alertChat = true }
 
 local function Greet()
@@ -839,6 +839,8 @@ SlashCmdList.POOR = function(msg)
 		P.ToggleWindow()
 	elseif cmd == "options" or cmd == "config" or cmd == "settings" then
 		P.OpenSettings()
+	elseif cmd == "setup" or cmd == "wizard" then
+		P.ShowWizard()
 	elseif cmd == "reset" then
 		P.ResetWindow()
 		P.Print("Window position and size reset.")
@@ -918,6 +920,7 @@ SlashCmdList.POOR = function(msg)
 		P.Print("v" .. P.VERSION .. " commands:")
 		print("  /poor - open the window")
 		print("  /poor options - open the settings page")
+		print("  /poor setup - run the first-time setup again")
 		print("  /poor reset - put the window back at its default place and size")
 		print("  /poor gold - five poorest members")
 		print("  /poor pvp [note] - alert the guild to PvP at your location")
