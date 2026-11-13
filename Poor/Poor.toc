@@ -1,0 +1,27 @@
+## Interface: 16001
+## Title: |cffb87333poor|r
+## Notes: Guild addon for <poor>: roster, poorest-member leaderboard, events, funds, begging board, bank and crafter directory, PvP alerts. Type /poor
+## Author: poor
+## Version: 0.8.5
+## Category: Guild
+## IconTexture: Interface\Icons\INV_Misc_Coin_05
+## SavedVariables: PoorDB
+## AddonCompartmentFunc: Poor_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: Poor_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: Poor_OnAddonCompartmentLeave
+
+Core.lua
+Comm.lua
+Alts.lua
+Alert.lua
+Funds.lua
+Shame.lua
+Board.lua
+Blobs.lua
+Bank.lua
+Crafts.lua
+Race.lua
+UI.lua
+Panels.lua
+Minimap.lua
+Settings.lua

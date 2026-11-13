@@ -1,0 +1,75 @@
+-- poor -- Settings.lua
+-- The addon's page in the game's Options > AddOns list. Every checkbox reads
+-- and writes PoorDB.opts directly, so the slash toggles and this page always
+-- agree.
+local _, P = ...
+
+local category
+
+local ROWS = {
+	{ header = "General" },
+	{ key = "greet", label = "Login greeting",
+		tip = "Greet you in chat at login with your gold, your poverty rank, open funds and upcoming events." },
+	{ key = "minimap", label = "Minimap button",
+		tip = "Show the coin button on the minimap. The addon also sits in the addon compartment and answers to /poor.",
+		changed = function() P.MinimapInit() end },
+	{ header = "Gold" },
+	{ key = "share", label = "Share my gold with the guild",
+		tip = "Report this character's gold to guildmates who run the addon, for the Poorest leaderboard. Off: you see others but nobody sees you.",
+		changed = function(value) if value and P.started then P.SendGoldSoon() end end },
+	{ key = "combineAlts", label = "Count alts with their main",
+		tip = "On the Poorest and Shame tabs, add each player's linked characters together. Link yours with /poor main <name>." },
+	{ key = "thankDonors", label = "Whisper a thank-you for donations",
+		tip = "When you accept a traded or mailed donation for a fund you collect, whisper the donor a thank-you with the fund's progress." },
+	{ header = "PvP alerts" },
+	{ key = "alerts", label = "Receive PvP alerts",
+		tip = "Show a warning and play a sound when a guildmate sends a PvP alert." },
+	{ key = "alertPin", label = "Pin the location of incoming alerts",
+		tip = "Set your map pin (and a TomTom arrow, if installed) where the alert came from. This replaces a pin you had set." },
+	{ key = "alertChat", label = "Post my alerts in guild chat",
+		tip = "When you send an alert, also write a line with a map pin link in guild chat for guildmates without the addon." },
+}
+
+local function Build()
+	local layout
+	category, layout = Settings.RegisterVerticalLayoutCategory("poor")
+	for _, row in ipairs(ROWS) do
+		if row.header then
+			layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(row.header))
+		else
+			local variable = "POOR_" .. row.key:upper()
+			local setting = Settings.RegisterAddOnSetting(category, variable, row.key, P.db.opts,
+				Settings.VarType.Boolean, row.label, P.DEFAULT_OPTS[row.key])
+			Settings.CreateCheckbox(category, setting, row.tip)
+			Settings.SetOnValueChangedCallback(variable, function(_, _, value)
+				if row.changed then row.changed(value) end
+				P.Fire("Options")
+			end)
+		end
+	end
+	layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Window"))
+	layout:AddInitializer(CreateSettingsButtonInitializer("Window position and size", "Reset", function()
+		P.ResetWindow()
+	end, "Put the poor window back in the middle of the screen at its normal size.", true))
+	Settings.RegisterAddOnCategory(category)
+end
+
+function P.SettingsInit()
+	if category or not (Settings and Settings.RegisterVerticalLayoutCategory) then return end
+	local ok, err = pcall(Build)
+	if not ok then
+		category = nil
+		P.settingsError = tostring(err)
+	end
+end
+
+function P.OpenSettings()
+	if category and Settings.OpenToCategory then
+		Settings.OpenToCategory(category:GetID())
+	elseif P.settingsError then
+		P.Print("The options page could not be built: " .. P.settingsError)
+		P.Print("The slash toggles still work, see /poor help.")
+	else
+		P.Print("This client has no options panel for addons. Use the slash toggles, see /poor help.")
+	end
+end

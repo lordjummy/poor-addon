@@ -1,0 +1,10 @@
+<!-- Loaded by the client on its own from the addon root; not listed in the TOC.
+     No default keys. The labels and functions are in Alert.lua. -->
+<Bindings>
+	<Binding name="POOR_PVP_ALERT" category="BINDING_HEADER_POOR">
+		Poor_PvPAlert()
+	</Binding>
+	<Binding name="POOR_TOGGLE" category="BINDING_HEADER_POOR">
+		Poor_Toggle()
+	</Binding>
+</Bindings>
