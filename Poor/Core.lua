@@ -820,7 +820,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog", "addonUsers", "wizardChars" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog", "addonUsers", "addonVersions", "wizardChars" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
@@ -922,6 +922,14 @@ function P.ShowDebug()
 		for char in pairs(P.db.myChars) do tinsert(mine, char) end
 		table.sort(mine)
 		out("this account's characters: " .. table.concat(mine, ", "))
+	end)
+	section("Versions", function()
+		out(("this copy: %s   newest heard of: %s   update notice due: %s"):format(P.VERSION, tostring(P.db.latestVersion), tostring(P.UpdateAvailable() ~= nil)))
+		out(("version messages this session: %d sent, %d received"):format(P.versionSent or 0, P.versionHeard or 0))
+		local parts = {}
+		for name, e in pairs(P.db.addonVersions) do tinsert(parts, ("%s %s (%s)"):format(P.ShortName(name), e.v, P.Ago(e.ts))) end
+		table.sort(parts)
+		out("members' versions, as last heard: " .. (#parts > 0 and table.concat(parts, ", ") or "none heard yet"))
 	end)
 	section("Stored data", function()
 		local parts = {}

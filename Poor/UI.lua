@@ -345,7 +345,7 @@ local ARROW_DOWN = " |TInterface\\Buttons\\UI-SortArrow:9:9:0:0:16:16:0:16:0:16|
 local ARROW_UP = " |TInterface\\Buttons\\UI-SortArrow:9:9:0:0:16:16:0:16:16:0|t"
 
 local ROSTER_COLUMNS = {
-	{ "Name", 140 }, { "Lvl", 28, "RIGHT" }, { "Rank", 90 }, { "Zone", 140 }, { "Addon", 44 }, { "Note", 150 },
+	{ "Name", 140 }, { "Lvl", 28, "RIGHT" }, { "Rank", 90 }, { "Zone", 140 }, { "Addon", 50 }, { "Note", 144 },
 }
 
 -- What each column sorts by. Text compares without regard to case. The Addon
@@ -372,7 +372,15 @@ local function BuildRoster(panel)
 		c[2]:SetText(m.level)
 		c[3]:SetText(m.rank)
 		c[4]:SetText(m.online and m.zone or "|cff808080offline|r")
-		c[5]:SetText(P.HasAddon(m.name) and "|cff40ff40yes|r" or "|cff606060-|r")
+		-- Their version when known: green if current, gold if behind this copy.
+		local theirs = P.db.addonVersions[m.name]
+		if m.name == P.me then
+			c[5]:SetText("|cff40ff40" .. P.VERSION .. "|r")
+		elseif theirs and P.HasAddon(m.name) then
+			c[5]:SetText((P.VersionOlder(theirs.v, P.VERSION) and "|cffffd100" or "|cff40ff40") .. theirs.v .. "|r")
+		else
+			c[5]:SetText(P.HasAddon(m.name) and "|cff40ff40yes|r" or "|cff606060-|r")
+		end
 		c[6]:SetText(m.note)
 		row:SetAlpha(m.online and 1 or 0.55)
 	end, function(row)

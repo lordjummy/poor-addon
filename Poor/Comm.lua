@@ -236,6 +236,11 @@ local function VersionNumber(v)
 	return a and (tonumber(a) * 1000000 + tonumber(b) * 1000 + (tonumber(c) or 0))
 end
 
+function P.VersionOlder(a, b)
+	local x, y = VersionNumber(a), VersionNumber(b)
+	return x ~= nil and y ~= nil and x < y
+end
+
 --- The newer version this copy has heard of, or nil when it is up to date.
 function P.UpdateAvailable()
 	local latest, mine = VersionNumber(P.db.latestVersion or ""), VersionNumber(P.VERSION)
@@ -249,23 +254,27 @@ function P.UpdateNotice()
 end
 
 local function SendVersion()
+	P.versionSent = (P.versionSent or 0) + 1
 	local latest = P.UpdateAvailable()
 	pcall(C_ChatInfo.SendAddonMessage, VERSION_PREFIX, P.VERSION .. (latest and (" " .. latest) or ""), "GUILD")
 end
 
 local replyPending = false
 
-local function OnVersion(_, message)
+local function OnVersion(sender, message)
 	-- Their own version first, then the newest they have heard of.
 	local theirs, best, bestText
 	for text in tostring(message):gmatch("%S+") do
 		local n = VersionNumber(text)
 		if n then
+			-- Remember which version each member runs: the Roster shows it.
+			if not theirs then P.db.addonVersions[sender] = { v = text:sub(1, 12), ts = P.Now() } end
 			theirs = theirs or n
 			if not best or n > best then best, bestText = n, text:sub(1, 12) end
 		end
 	end
 	if not best then return end
+	P.versionHeard = (P.versionHeard or 0) + 1
 	P.Hear("V", best)
 	local known = VersionNumber(P.UpdateAvailable() or P.VERSION)
 	if known and best > known then
