@@ -156,7 +156,7 @@ P.handlers.B = function(_, id, rev, state, author, helper, created, amount, loan
 		P.Print(("%s received your help with %s.%s"):format(P.ShortName(author), Describe(r),
 			P.IsDebt(r) and " It stays on the ledger until you mark it repaid." or ""))
 	elseif state == "Q" and r.helper == P.me then
-		P.Print(("%s says the loan is paid back: %s. Confirm it on the Board tab."):format(P.ShortName(author), Describe(r)))
+		P.Print(("%s says the loan is paid back: %s. Confirm it on the Gold tab, under Requests and loans."):format(P.ShortName(author), Describe(r)))
 	elseif state == "P" and author == P.me then
 		P.Print(("%s marked your loan as repaid: %s."):format(P.ShortName(r.helper or "?"), Describe(r)))
 	end

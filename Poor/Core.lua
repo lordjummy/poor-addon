@@ -724,7 +724,7 @@ end
 local DEFAULT_OPTS = {
 	combineAlts = true, thankDonors = true,
 	-- Gold is private until the player says otherwise: sharing starts off, and
-	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
+	-- the Poorest board asks once (shareAsked) whether to join the leaderboard.
 	showOffline = false, share = false, shareAsked = false, wizardDone = false, minimap = true, angle = 215, greet = true,
 	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true, groupNotify = true,
 	-- Deaths and repair bills are private until opted in. Group posts also go

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+
+- New Home tab: one line per area showing what is going on right now, each opening its tab.
+- Fewer tabs. Funds and the Board are together under Gold; Poorest, Race and Shame are together under Leaderboards. The alert log opens with a right-click on the PvP alert button.
+
 ## 0.13.0
 
 Changes from an outside review of the addon.

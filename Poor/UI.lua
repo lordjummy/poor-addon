@@ -469,7 +469,7 @@ local function BuildRoster(panel)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		GameTooltip:AddLine("Link your characters")
 		GameTooltip:AddLine("Tell the guild which of your characters is your main. Your alts are then counted with it "
-			.. "on the Poorest and Shame tabs and as one donor on funds. It applies to every character of yours that has logged in with the addon.", 1, 1, 1, true)
+			.. "on the Poorest and Shame boards and as one donor on funds. It applies to every character of yours that has logged in with the addon.", 1, 1, 1, true)
 		GameTooltip:Show()
 	end)
 	mainButton:SetScript("OnLeave", GameTooltip_Hide)
@@ -592,7 +592,7 @@ local function BuildPoorest(panel)
 	end)
 	share:SetScript("OnLeave", GameTooltip_Hide)
 	StaticPopupDialogs["POOR_SHARE"] = {
-		text = "The Poorest tab ranks the guild by how little gold everyone has.\n\nShare your gold with guildmates who use the addon and join the board?\n\nYou can change this any time with the \"Share my gold\" box.",
+		text = "The Poorest board ranks the guild by how little gold everyone has.\n\nShare your gold with guildmates who use the addon and join the board?\n\nYou can change this any time with the \"Share my gold\" box.",
 		button1 = YES,
 		button2 = NO,
 		OnAccept = function()
@@ -1326,13 +1326,10 @@ end
 ---------------------------------------------------------------------------
 -- Window
 ---------------------------------------------------------------------------
--- Panels.lua adds its tabs to this list and builds them with these helpers.
-P.tabs = {
-	{ "Roster", BuildRoster },
-	{ "Poorest", BuildPoorest },
-	{ "Events", BuildEvents },
-	{ "Funds", BuildFunds },
-}
+-- Panels.lua puts the sidebar together from these builders and its own, and
+-- builds its panels with the helpers below.
+P.tabs = {}
+P.builders = { Roster = BuildRoster, Poorest = BuildPoorest, Events = BuildEvents, Funds = BuildFunds }
 P.ui = { Label = Label, Button = Button, EditBox = EditBox, SearchBox = SearchBox, Check = Check, List = List,
 	ClassName = ClassName, Whisper = Whisper, Fill = Fill, Border = Border, ACCENT = ACCENT, COLOR = COLOR, FONT_TITLE = FONT_TITLE }
 
@@ -1341,13 +1338,15 @@ P.ui = { Label = Label, Button = Button, EditBox = EditBox, SearchBox = SearchBo
 local function LayoutTabs()
 	local row = 0
 	for i, tab in ipairs(P.tabs) do
-		local shown = not tab.visible or tab.visible()
+		-- `hidden` tabs are reached another way (the alert log, from the PvP
+		-- button) and never sit in the sidebar.
+		local shown = not tab.hidden and (not tab.visible or tab.visible())
 		tabButtons[i]:SetShown(shown)
 		if shown then
 			tabButtons[i]:ClearAllPoints()
 			tabButtons[i]:SetPoint("TOPLEFT", window, "TOPLEFT", 1, -HEADER - 10 - row * 26)
 			row = row + 1
-		elseif i == activeTab then
+		elseif i == activeTab and not tab.hidden then
 			activeTab = 1
 		end
 	end
@@ -1361,6 +1360,18 @@ local function SelectTab(index)
 		tabButtons[i]:SetSelected(i == activeTab)
 	end
 	panels[activeTab]:Refresh()
+end
+
+--- Open the window on a tab by name; `part` picks a section inside a tab
+--- that has several (Gold, Leaderboards).
+function P.ShowTab(name, part)
+	P.OpenWindow()
+	for i, tab in ipairs(P.tabs) do
+		if tab[1] == name then
+			if part and panels[i].ShowPart then panels[i]:ShowPart(part) end
+			return SelectTab(i)
+		end
+	end
 end
 
 local function Refresh()
@@ -1519,7 +1530,10 @@ local function BuildWindow()
 		tabButtons[i] = b
 	end
 
-	local alert = Button(f, "|cffff6060PvP alert|r", SIDEBAR - 20, function() P.SendPvPAlert("") end)
+	local alert = Button(f, "|cffff6060PvP alert|r", SIDEBAR - 20, function(_, button)
+		if button == "RightButton" then P.ShowTab("Alerts") else P.SendPvPAlert("") end
+	end)
+	alert:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	alert:SetHeight(22)
 	alert:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 38)
 	alert:SetScript("OnEnter", function(self)
@@ -1528,6 +1542,7 @@ local function BuildWindow()
 		GameTooltip:AddLine("Tells the guild where you are: a warning and map pin for addon users, and a line in guild chat. "
 			.. "An enemy player you have targeted is named.", 1, 1, 1, true)
 		GameTooltip:AddLine("Also: /poor pvp <note>, or bind a key under Options > Keybindings > poor.", 0.6, 0.6, 0.6, true)
+		GameTooltip:AddLine("Right-click for the list of recent alerts.", 0.6, 0.6, 0.6, true)
 		GameTooltip:Show()
 	end)
 	alert:SetScript("OnLeave", GameTooltip_Hide)

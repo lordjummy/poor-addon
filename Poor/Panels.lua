@@ -1122,12 +1122,215 @@ local function BuildRecruit(panel)
 	end
 end
 
--- A tab with a `visible` function is left out of the sidebar while it has
--- nothing to offer this player.
-for _, tab in ipairs({
-	{ "Race", BuildRace },
-	{ "Board", BuildBoard },
-	{ "Shame", BuildShame, visible = function() return next(P.db.shame) ~= nil end },
+---------------------------------------------------------------------------
+-- Several panels under one tab, with a row of buttons to switch between
+-- them. parts = { { "Label", builder, visible = function() ... end }, ... }
+---------------------------------------------------------------------------
+local function Combined(parts)
+	return function(panel)
+		local active, frames, buttons = 1, {}, {}
+		for i, part in ipairs(parts) do
+			-- Each part keeps its own layout, moved down to make room for the buttons.
+			local child = CreateFrame("Frame", nil, panel)
+			child:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -26)
+			child:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+			child:Hide()
+			part[2](child)
+			frames[i] = child
+			buttons[i] = Button(panel, part[1], part.width or 110, function()
+				active = i
+				PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+				panel:Refresh()
+			end)
+		end
+
+		function panel:ShowPart(label)
+			for i, part in ipairs(parts) do
+				if part[1] == label then active = i end
+			end
+		end
+
+		function panel:Refresh()
+			local x, first = 10, nil
+			for i, part in ipairs(parts) do
+				local shown = not part.visible or part.visible()
+				buttons[i]:SetShown(shown)
+				if shown then
+					first = first or i
+					buttons[i]:ClearAllPoints()
+					buttons[i]:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -60)
+					x = x + buttons[i]:GetWidth() + 4
+				elseif i == active then
+					active = nil
+				end
+			end
+			active = active or first or 1
+			for i, child in ipairs(frames) do
+				child:SetShown(i == active)
+				if i == active then buttons[i]:LockHighlight() else buttons[i]:UnlockHighlight() end
+			end
+			frames[active]:Refresh()
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- Home: what is going on in the guild right now, one line per area, each a
+-- door to its tab.
+---------------------------------------------------------------------------
+local function BuildHome(panel)
+	local heading = Label(panel, nil, "GameFontNormal")
+	heading:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -63)
+	local presence = Label(panel)
+	presence:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -28, -66)
+	presence:SetWidth(330)
+	presence:SetJustifyH("RIGHT")
+	presence:SetTextColor(0.6, 0.6, 0.6)
+
+	local list = List(panel, { { "", 96 }, { "Right now", 530 } }, function(row, e)
+		row.cells[1]:SetText("|cffdb8f45" .. e.area .. "|r")
+		row.cells[2]:SetText(e.text)
+	end, function(row)
+		row:SetScript("OnClick", function(self)
+			if self.data.tab then
+				PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+				P.ShowTab(self.data.tab, self.data.part)
+			end
+		end)
+		row:SetScript("OnEnter", function(self)
+			local e = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(e.area)
+			GameTooltip:AddLine(e.text, 1, 1, 1, true)
+			if e.tab then GameTooltip:AddLine("Click to open it.", 0.6, 0.6, 0.6) end
+			GameTooltip:Show()
+		end)
+	end, -100, 30)
+
+	local footer = Label(panel)
+	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	footer:SetTextColor(0.6, 0.6, 0.6)
+
+	local function Plural(n, word) return n .. " " .. word .. (n == 1 and "" or "s") end
+
+	function panel:Refresh()
+		local rows = {}
+		local function add(area, text, tab, part) tinsert(rows, { area = area, text = text, tab = tab, part = part }) end
+
+		local online = 0
+		for _, m in ipairs(P.roster) do
+			if m.online then online = online + 1 end
+		end
+		local audience, audienceOnline = P.AddonAudience()
+		heading:SetText("Hello, " .. P.ShortName(P.me):match("^%S+"))
+		presence:SetText(#P.roster > 0 and ("%d of %d online   %d with the addon, %d of them online"):format(online, #P.roster, audience, audienceOnline) or "")
+
+		local latest = P.UpdateAvailable()
+		if latest then add("Update", ("|cffffd100Version %s is out|r (you have %s). Update with WowUp or the CurseForge app, then restart the game."):format(latest, P.VERSION)) end
+
+		-- Groups: open listings, else who is around the player's level.
+		local level = UnitLevel("player")
+		local groups = P.GroupList()
+		if #groups > 0 then
+			local parts = {}
+			for i, g in ipairs(groups) do
+				if i > 3 then break end
+				parts[i] = ("%s wants %s%s"):format(ClassName(g.author), g.activity, g.need ~= "" and (" (needs " .. P.RoleNames(g.need) .. ")") or "")
+			end
+			add("Groups", table.concat(parts, "   "), "Groups")
+		else
+			local near, parts = P.CouldCome(level - 3, level + 3), {}
+			for i, m in ipairs(near) do
+				if i > 5 then break end
+				parts[i] = ("%s |cff999999%d|r"):format(P.ClassColored(P.ShortName(m.name):match("^%S+"), m.class), m.level)
+			end
+			add("Groups", #near > 0 and ("Nobody is looking for a group. Online near your level: %s%s"):format(table.concat(parts, ", "), #near > 5 and " and more" or "")
+				or "Nobody is looking for a group, and nobody near your level is online. Post a listing anyway.", "Groups")
+		end
+
+		-- Events: the next one, and whether the player answered.
+		local nextEvent
+		for _, e in ipairs(P.EventList()) do
+			if not nextEvent and e.time > P.Now() then nextEvent = e end
+		end
+		if nextEvent then
+			local mine = nextEvent.signups[P.me]
+			local answer = mine and ({ Y = "|cff40ff40you are in|r", M = "|cffffd100you said maybe|r", N = "|cff999999you are out|r" })[mine.status]
+				or "|cffffd100you have not answered|r"
+			add("Events", ("%s, %s: %s"):format(nextEvent.title, date("%a %d %b %H:%M", nextEvent.time), answer), "Events")
+		else
+			add("Events", "|cff999999Nothing planned. Anyone can put an event up.|r", "Events")
+		end
+
+		-- Gold: open funds and lotteries, the player's pledges, requests and debts.
+		local open, parts = 0, {}
+		for _, f in ipairs(P.FundList()) do
+			if not f.closed then
+				open = open + 1
+				if #parts < 3 then
+					local total = P.FundTotal(f)
+					tinsert(parts, f.price and ("%s lottery, pot %s"):format(f.title, P.MoneyIcons(total))
+						or (f.goal > 0 and ("%s %s of %s"):format(f.title, P.MoneyIcons(total), P.MoneyIcons(f.goal)) or ("%s %s"):format(f.title, P.MoneyIcons(total))))
+				end
+			end
+		end
+		add("Funds", open > 0 and table.concat(parts, "   ") or "|cff999999No fund or lottery is open.|r", "Gold", "Funds and lotteries")
+		local requests, mineOwed = 0, {}
+		for _, r in ipairs(P.BoardList()) do
+			if r.state == "O" then requests = requests + 1 end
+		end
+		for _, d in ipairs(P.Debts()) do
+			if d.debtor == P.me then tinsert(mineOwed, ("you owe %s %s"):format(P.ShortName(d.creditor), P.MoneyIcons(d.copper))) end
+			if d.creditor == P.me then tinsert(mineOwed, ("%s owes you %s"):format(P.ShortName(d.debtor), P.MoneyIcons(d.copper))) end
+		end
+		if requests > 0 or #mineOwed > 0 then
+			add("Requests", (requests > 0 and (Plural(requests, "guildmate") .. " asking for help. ") or "") .. table.concat(mineOwed, ", "), "Gold", "Requests and loans")
+		end
+
+		-- Leaderboards: the race, and the player's place in it.
+		local done, podium = P.Finishers(), {}
+		for i = 1, 3 do
+			podium[i] = ({ "1st", "2nd", "3rd" })[i] .. " " .. (done[i] and ClassName(done[i].name) or "|cff999999open|r")
+		end
+		local place
+		for i, c in ipairs(P.Contenders()) do
+			if c.name == P.me then place = i end
+		end
+		add("Race to " .. P.MAX_LEVEL, table.concat(podium, "   ") .. (place and ("   You are #%d of those still running, at level %d."):format(place, level) or ""),
+			"Leaderboards", "Race")
+
+		local wanted = P.WantedText()
+		if wanted then add("Recruiting", "The guild is looking for: " .. wanted .. (P.CanRecruit() and "" or ". Know someone? Tell an officer."), P.CanRecruit() and "Recruit" or nil) end
+
+		local last = P.db.alertLog[1]
+		if last and P.Now() - last.ts < 3600 then
+			add("PvP", ("%s at %s, %s"):format(ClassName(last.from), P.AlertPlace(last), P.Ago(last.ts)), "Alerts")
+		end
+
+		list:SetRows(rows)
+		footer:SetText(audience == 0 and "You are the first here with the addon. What you post reaches guildmates once they install it."
+			or "Each line opens its tab. What you post in the addon reaches the guildmates who have it.")
+	end
+end
+
+-- The sidebar. A tab with a `visible` function is left out while it has
+-- nothing to offer this player; a `hidden` one is reached another way.
+local B = P.builders
+P.tabs = {
+	{ "Home", BuildHome },
+	{ "Roster", B.Roster },
+	{ "Groups", BuildGroups },
+	{ "Events", B.Events },
+	{ "Gold", Combined({
+		{ "Funds and lotteries", B.Funds, width = 140 },
+		{ "Requests and loans", BuildBoard, width = 140 },
+	}) },
+	{ "Leaderboards", Combined({
+		{ "Poorest", B.Poorest, width = 90 },
+		{ "Race", BuildRace, width = 90 },
+		{ "Shame", BuildShame, width = 90, visible = function() return next(P.db.shame) ~= nil end },
+	}) },
+	{ "Crafters", BuildCrafters },
 	{ "Bank", BuildBank, visible = function()
 		if P.AmOfficer() or P.IsBankChar() then return true end
 		for key, blob in pairs(P.db.blobs) do
@@ -1135,11 +1338,6 @@ for _, tab in ipairs({
 		end
 		return false
 	end },
-	{ "Crafters", BuildCrafters },
 	{ "Recruit", BuildRecruit, visible = function() return P.CanRecruit() end },
-	{ "Alerts", BuildAlerts, visible = function() return #P.db.alertLog > 0 end },
-}) do
-	tinsert(P.tabs, tab)
-end
--- The most used tab sits right under the roster.
-tinsert(P.tabs, 2, { "Groups", BuildGroups })
+	{ "Alerts", BuildAlerts, hidden = true }, -- opened by right-clicking the PvP alert button
+}

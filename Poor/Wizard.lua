@@ -60,7 +60,7 @@ local STEPS = {
 			Option(page, "share", "My gold, to be ranked on the Poorest leaderboard", -34, function(on)
 				if on and P.started then P.SendGoldSoon() end
 			end)
-			Option(page, "shareShame", "My deaths and repair bills, for the Shame tab", -58, function(on)
+			Option(page, "shareShame", "My deaths and repair bills, for the Shame board", -58, function(on)
 				if on and P.started then P.Report("shame") end
 			end)
 			Text(page, "Shared with guildmates who use the addon without asking, because the features need it: your professions and "

@@ -494,7 +494,7 @@ local function AskNext()
 		dialog.data = gift
 		asking = true
 	else
-		P.Print(("%s gave you %s. Add it on the Funds tab if it was for %s."):format(
+		P.Print(("%s gave you %s. Add it on the Gold tab if it was for %s."):format(
 			P.ShortName(gift.name), P.MoneyIcons(gift.copper), f.title))
 	end
 end
@@ -670,7 +670,7 @@ local function OnReceived(name, copper, how)
 	--    A lottery only takes whole tickets that way.
 	if P.FundAuto(f.id) and P.members[name] and (not f.price or copper % f.price == 0) then
 		if P.AddDonation(f.id, name, copper, how) then
-			P.Print(("Counted %s from %s for |cffffffff%s|r automatically. Remove on the Funds tab undoes it."):format(
+			P.Print(("Counted %s from %s for |cffffffff%s|r automatically. Remove on the Gold tab undoes it."):format(
 				P.MoneyIcons(copper), P.ShortName(name), f.title))
 			return
 		end

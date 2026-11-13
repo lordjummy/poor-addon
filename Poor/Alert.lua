@@ -77,7 +77,7 @@ local function SetPin(mapID, x, y, title)
 	end
 end
 
---- Keep the last alerts for the Alerts tab.
+--- Keep the last alerts for the alert log (right-click the PvP alert button).
 local function Log(entry)
 	tinsert(P.db.alertLog, 1, entry)
 	for i = #P.db.alertLog, 31, -1 do P.db.alertLog[i] = nil end
@@ -170,7 +170,7 @@ function P.OnAlert(sender, mapID, x, y, zone, sub, note)
 			SetPin(mapID, x, y, "PvP: " .. who)
 		end
 	else
-		P.Print(("|cffff9050PvP elsewhere:|r %s at |cffffffff%s|r%s  |cff999999(the Alerts tab can pin it)|r"):format(name, place, tail))
+		P.Print(("|cffff9050PvP elsewhere:|r %s at |cffffffff%s|r%s  |cff999999(right-click the PvP alert button to pin it)|r"):format(name, place, tail))
 	end
 end
 

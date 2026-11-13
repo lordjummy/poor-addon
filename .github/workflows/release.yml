@@ -25,7 +25,11 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" "dist/poor-$version-forever.zip" \
             --title "$version" --notes-file "dist/notes-$version.md"
+      # Skipped while the repository variable CF_UPLOAD is "off":
+      #   gh variable set CF_UPLOAD --body off     (GitHub release only)
+      #   gh variable set CF_UPLOAD --body on      (both again)
       - name: Upload to CurseForge
+        if: ${{ vars.CF_UPLOAD != 'off' }}
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: bash tools/release.sh "$GITHUB_REF_NAME"
