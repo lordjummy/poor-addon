@@ -873,15 +873,38 @@ local function BuildRecruit(panel)
 	end)
 	want:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -62)
 
-	local levelLabel = Label(detail, "Levels", "GameFontNormalSmall")
+	-- Everything used to go and find players sits on one frame, so it can be
+	-- put away for members when the officers keep recruiting to themselves.
+	local tools = CreateFrame("Frame", nil, detail)
+	tools:SetAllPoints(detail)
+	local closed = Label(detail, "Recruiting is handled by the officers.\n\nKnow someone who would fit? Tell an officer.", "GameFontDisable")
+	closed:SetPoint("CENTER", detail, "CENTER", -10, -20)
+	closed:SetWidth(380)
+	closed:SetWordWrap(true)
+	closed:SetJustifyH("CENTER")
+	local officersOnly = P.ui.Check(side, "Only officers recruit", function(on)
+		local ok, err = P.SetOfficersOnly(on)
+		if not ok then P.Print(err) end
+	end)
+	officersOnly:SetPoint("BOTTOMLEFT", side, "BOTTOMLEFT", 10, 8)
+	officersOnly:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Keep recruiting to officers")
+		GameTooltip:AddLine("On: only officers can search for players and send the recruiting message from this tab. "
+			.. "Members still see the class breakdown and what the guild is looking for.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	officersOnly:SetScript("OnLeave", GameTooltip_Hide)
+
+	local levelLabel = Label(tools, "Levels", "GameFontNormalSmall")
 	levelLabel:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -92)
-	local minBox = EditBox(detail, 36, 2)
+	local minBox = EditBox(tools, 36, 2)
 	minBox:SetPoint("LEFT", levelLabel, "RIGHT", 8, 0)
-	local toLabel = Label(detail, "to", "GameFontNormalSmall")
+	local toLabel = Label(tools, "to", "GameFontNormalSmall")
 	toLabel:SetPoint("LEFT", minBox, "RIGHT", 6, 0)
-	local maxBox = EditBox(detail, 36, 2)
+	local maxBox = EditBox(tools, 36, 2)
 	maxBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
-	local find = Button(detail, "", 190, function()
+	local find = Button(tools, "", 190, function()
 		if not chosen then return end
 		local ok, err = P.FindRecruits(chosen, tonumber(minBox:GetText()), tonumber(maxBox:GetText()))
 		if not ok then P.Print(err) end
@@ -898,9 +921,9 @@ local function BuildRecruit(panel)
 
 	-- The message typed into a recruiting whisper. Everyone can have their
 	-- own; officers can also set the one the guild uses by default.
-	local pitchLabel = Label(detail, "Message", "GameFontNormalSmall")
+	local pitchLabel = Label(tools, "Message", "GameFontNormalSmall")
 	pitchLabel:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -118)
-	local pitchBox = EditBox(detail, 268, P.PITCH_MAX)
+	local pitchBox = EditBox(tools, 268, P.PITCH_MAX)
 	pitchBox:SetPoint("LEFT", pitchLabel, "RIGHT", 8, 0)
 	local function Explain(self, title, text)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
@@ -909,7 +932,7 @@ local function BuildRecruit(panel)
 		GameTooltip:AddLine("Filled in for you: {class}, {name} (their first name), {level}, {guild}.", 0.6, 0.6, 0.6, true)
 		GameTooltip:Show()
 	end
-	local pitchSave = Button(detail, "Save", 46, function()
+	local pitchSave = Button(tools, "Save", 46, function()
 		P.SetMyPitch(pitchBox:GetText())
 		pitchBox:ClearFocus()
 		P.Print(P.db.opts.myPitch and "Your own recruiting message is saved." or "Back to the guild's recruiting message.")
@@ -920,7 +943,7 @@ local function BuildRecruit(panel)
 			.. "You can still edit the text in the chat box before sending.")
 	end)
 	pitchSave:SetScript("OnLeave", GameTooltip_Hide)
-	local pitchGuild = Button(detail, "For guild", 64, function()
+	local pitchGuild = Button(tools, "For guild", 64, function()
 		local ok, err = P.SetPitch(pitchBox:GetText())
 		if not ok then return P.Print(err) end
 		P.SetMyPitch("") -- the officer's own copy would otherwise hide the guild's
@@ -932,12 +955,12 @@ local function BuildRecruit(panel)
 		Explain(self, "The guild's message", "Make this the message every member starts from, unless they saved one of their own.")
 	end)
 	pitchGuild:SetScript("OnLeave", GameTooltip_Hide)
-	local pitchNote = Label(detail)
+	local pitchNote = Label(tools)
 	pitchNote:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -140)
 	pitchNote:SetWidth(450)
 	pitchNote:SetTextColor(0.6, 0.6, 0.6)
 
-	local list = List(detail, {
+	local list = List(tools, {
 		{ "Player", 120 }, { "Lvl", 36, "RIGHT" }, { "", 6 }, { "Zone", 90 }, { "", 56 },
 	}, function(row, c)
 		local cells = row.cells
@@ -970,7 +993,7 @@ local function BuildRecruit(panel)
 		end)
 	end, -180, 46)
 
-	local empty = Label(detail, nil, "GameFontDisable")
+	local empty = Label(tools, nil, "GameFontDisable")
 	empty:SetPoint("CENTER", detail, "CENTER", -10, -50)
 	empty:SetWidth(400)
 	empty:SetWordWrap(true)
@@ -994,6 +1017,11 @@ local function BuildRecruit(panel)
 		picker:SetRows(rows)
 
 		local wanted, officer = P.WantedText(), P.AmOfficer()
+		local allowed = P.CanRecruit()
+		tools:SetShown(allowed)
+		closed:SetShown(not allowed)
+		officersOnly:SetShown(officer)
+		officersOnly:SetChecked(P.Recruit().officersOnly and true or false)
 		heading:SetText(wanted and ("Recruiting: |cffffffff" .. wanted .. "|r") or "|cff999999No class marked as wanted|r")
 		want:SetShown(officer and chosen ~= nil)
 		if chosen then
@@ -1020,7 +1048,7 @@ local function BuildRecruit(panel)
 		list:SetRows(P.candidates)
 		empty:SetText("Pick a class on the left and press Find to look for players without a guild.")
 		empty:SetShown(#P.candidates == 0)
-		footer:SetText(P.candidateNote or "Whispers go one at a time, and only when you press Enter. Players anyone in the guild approached are dimmed for a month.")
+		footer:SetText(not allowed and "" or P.candidateNote or "Whispers go one at a time, and only when you press Enter. Players anyone in the guild approached are dimmed for a month.")
 	end
 end
 

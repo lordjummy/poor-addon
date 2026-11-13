@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1
+
+- Officers can keep recruiting to themselves: an "Only officers recruit" switch on the Recruit tab.
+
 ## 0.12.0
 
 - Recruit tab: write your own recruiting message, with the player's name, class and level filled in. Officers can set the guild's default.

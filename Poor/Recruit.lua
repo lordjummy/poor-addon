@@ -7,7 +7,7 @@
 --   db.recruitLog   = { [name] = { ts, what } }                             who this account approached
 --   blob "A:<recruiter>" = { "name~what~ts", ... }                          the same, shared (Blobs.lua)
 --
--- Wire (compatible addition): K^rev^by^min^classes^pitch      highest rev wins
+-- Wire (compatible addition): K^rev^by^min^classes^pitch^officersOnly      highest rev wins
 local _, P = ...
 
 P.CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
@@ -51,7 +51,7 @@ end
 -- What the officers want recruited
 ---------------------------------------------------------------------------
 local function Line(r)
-	return ("K^%d^%s^%d^%s^%s"):format(r.rev, r.by or "", r.min or 0, r.classes or "", r.pitch or "")
+	return ("K^%d^%s^%d^%s^%s^%d"):format(r.rev, r.by or "", r.min or 0, r.classes or "", r.pitch or "", r.officersOnly and 1 or 0)
 end
 
 function P.Recruit()
@@ -120,12 +120,22 @@ function P.SetWanted(token, wanted)
 	end)
 end
 
+--- Whether this player may search for and pitch to players from the addon.
+--- Officers can keep recruiting to themselves.
+function P.CanRecruit()
+	return not P.db.recruit.officersOnly or P.AmOfficer()
+end
+
+function P.SetOfficersOnly(on)
+	return Save(function(r) r.officersOnly = on and true or false end)
+end
+
 function P.SetPitch(text)
 	text = P.Clean(text, P.PITCH_MAX)
 	return Save(function(r) r.pitch = text end)
 end
 
-P.handlers.K = function(sender, rev, by, min, classes, pitch)
+P.handlers.K = function(sender, rev, by, min, classes, pitch, only)
 	rev = tonumber(rev)
 	if not rev then return end
 	P.Hear("K", rev)
@@ -135,6 +145,7 @@ P.handlers.K = function(sender, rev, by, min, classes, pitch)
 	r.rev, r.by, r.min = rev, (by and by ~= "") and by or sender, tonumber(min) or 0
 	r.classes = (classes or ""):gsub("[^%u,]", "")
 	r.pitch = P.Clean(pitch, P.PITCH_MAX)
+	r.officersOnly = only == "1"
 	P.Fire("Recruit")
 	if r.classes ~= before and r.classes ~= "" and not P.Syncing() then
 		P.Print(("The guild is recruiting: |cffffffff%s|r. The Recruit tab helps you find them."):format(P.WantedText()))
@@ -228,6 +239,7 @@ end
 --- Ask the server who is online of this class and level. The answer arrives
 --- a moment later and fires "Recruit". Must come from a click.
 function P.FindRecruits(token, min, max)
+	if not P.CanRecruit() then return nil, "Recruiting is handled by the officers." end
 	local F = C_FriendList
 	if not (F and F.SendWho and F.GetNumWhoResults and F.GetWhoInfo) then return nil, "This client has no /who search for addons." end
 	local wait = 6 - (GetTime() - lastSearch)
@@ -286,6 +298,7 @@ end
 --- Open a whisper to a candidate with the pitch typed in. Nothing is sent
 --- until the player presses Enter.
 function P.PitchTo(candidate)
+	if not P.CanRecruit() then return P.Print("Recruiting is handled by the officers.") end
 	P.ui.Whisper(candidate.name, P.Pitch(candidate.class, candidate))
 	Mark(candidate.name, "whispered")
 end
