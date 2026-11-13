@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1
+
+- No changes to how the addon works. A release to check that members on an older version are told about a newer one.
+
 ## 0.14.0
 
 - New Home tab: one line per area showing what is going on right now, each opening its tab.
