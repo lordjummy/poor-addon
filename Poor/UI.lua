@@ -1522,6 +1522,6 @@ P.On("Gold", Refresh)
 P.On("Events", Refresh)
 P.On("Funds", Refresh)
 P.On("Options", Refresh)
-for _, what in ipairs({ "Alts", "Shame", "Board", "Blob", "Crafts", "Names", "Alerts", "Race" }) do
+for _, what in ipairs({ "Alts", "Shame", "Board", "Blob", "Crafts", "Names", "Alerts", "Race", "Groups" }) do
 	P.On(what, Refresh)
 end

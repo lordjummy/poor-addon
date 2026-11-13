@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+- New Groups tab: post what you want to run and which roles you need, see who joins, invite them with one button. It also shows which online guildmates are in a dungeon's level range.
+
 ## 0.9.10
 
 - PvP alerts: the sound, on-screen warning and map pin now fire only if you are in the same zone. Alerts from elsewhere are a quiet chat line. An option turns the full warning back on for every alert.

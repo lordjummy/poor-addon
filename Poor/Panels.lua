@@ -642,6 +642,177 @@ local function BuildRace(panel)
 	end
 end
 
+---------------------------------------------------------------------------
+-- Groups: find guildmates for a dungeon or quest right now
+---------------------------------------------------------------------------
+local function BuildGroups(panel)
+	local picked                              -- { name, min, max } from the dungeon menu
+	local need = { T = false, H = false, D = false }
+
+	-- Line 1: what for, and which roles are missing
+	local forLabel = Label(panel, "Looking for", "GameFontNormalSmall")
+	forLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -66)
+	local activity = EditBox(panel, 190, P.GROUP_TEXT_MAX)
+	activity:SetPoint("LEFT", forLabel, "RIGHT", 10, 0)
+	activity:SetScript("OnTextChanged", function(self, byUser)
+		-- Typing something else drops the picked dungeon and its level range.
+		if byUser and picked and self:GetText() ~= picked[1] then
+			picked = nil
+			panel:Refresh()
+		end
+	end)
+	local function Pick(dungeon)
+		picked = dungeon
+		activity:SetText(dungeon[1])
+		activity:ClearFocus()
+		panel:Refresh()
+	end
+	local pick = Button(panel, "Dungeons", 76, function(self)
+		if MenuUtil and MenuUtil.CreateContextMenu then
+			MenuUtil.CreateContextMenu(self, function(_, root)
+				root:CreateTitle("Dungeon")
+				for _, d in ipairs(P.DUNGEONS) do
+					root:CreateButton(("%s  |cff999999%d-%d|r"):format(d[1], d[2], d[3]), function() Pick(d) end)
+				end
+			end)
+		else
+			-- No menus on this client: each click steps to the next dungeon.
+			local at = 0
+			for i, d in ipairs(P.DUNGEONS) do
+				if picked == d then at = i end
+			end
+			Pick(P.DUNGEONS[at % #P.DUNGEONS + 1])
+		end
+	end)
+	pick:SetPoint("LEFT", activity, "RIGHT", 6, 0)
+	local needLabel = Label(panel, "Need", "GameFontNormalSmall")
+	needLabel:SetPoint("LEFT", pick, "RIGHT", 16, 0)
+	local checks, x = {}, 10
+	for _, role in ipairs(P.ROLES) do
+		local check = P.ui.Check(panel, P.ROLE_NAME[role], function(on) need[role] = on end)
+		check:SetPoint("LEFT", needLabel, "RIGHT", x, 0)
+		checks[role] = check
+		x = x + (role == "H" and 74 or 64)
+	end
+
+	-- Line 2: the player's own role, and Post
+	local role = Button(panel, "", 130, function()
+		local current = P.MyRole()
+		for i, r in ipairs(P.ROLES) do
+			if r == current then
+				P.SetMyRole(P.ROLES[i % #P.ROLES + 1])
+				break
+			end
+		end
+		panel:Refresh()
+	end)
+	role:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -90)
+	local post = Button(panel, "Post", 80, function()
+		local letters = (need.T and "T" or "") .. (need.H and "H" or "") .. (need.D and "D" or "")
+		local g, err = P.PostGroup(activity:GetText(), letters, picked and picked[2], picked and picked[3])
+		if not g then return P.Print(err) end
+		activity:SetText("")
+		activity:ClearFocus()
+		panel:Refresh()
+	end)
+	post:SetPoint("LEFT", role, "RIGHT", 6, 0)
+	local hint = Label(panel, "A listing lasts 30 minutes. Your role is the one you post and join with.")
+	hint:SetPoint("LEFT", post, "RIGHT", 12, 0)
+	hint:SetTextColor(0.6, 0.6, 0.6)
+
+	local ROLE_COLOR = { T = "|cff6699ff", H = "|cff40ff40", D = "|cffff6060" }
+
+	local list = List(panel, {
+		{ "Looking for", 160 }, { "Who", 120 }, { "Needs", 100 }, { "Joined", 110 },
+	}, function(row, g)
+		local c = row.cells
+		local m = P.members[g.author]
+		local joiners = P.GroupJoiners(g)
+		local parts = {}
+		for i, j in ipairs(joiners) do
+			parts[i] = (ROLE_COLOR[j.role] or "") .. (j.role or "") .. "|r " .. P.ShortName(j.name)
+		end
+		c[1]:SetText(g.activity)
+		c[2]:SetText(ClassName(g.author) .. (m and (" |cff999999" .. m.level .. "|r") or ""))
+		c[3]:SetText(g.need ~= "" and P.RoleNames(g.need) or "|cff999999anyone|r")
+		c[4]:SetText(#parts > 0 and table.concat(parts, ", ") or "|cff808080nobody yet|r")
+		local mine = g.author == P.me
+		local joined = g.joiners[P.me] and g.joiners[P.me].role ~= "X"
+		row.action:SetText(mine and "Invite" or (joined and "Leave" or "Join"))
+		if joined and not mine then row.action:LockHighlight() else row.action:UnlockHighlight() end
+		row.close:SetShown(mine or P.AmOfficer())
+	end, function(row)
+		row.close = Button(row, "Close", 56, function() P.CloseGroup(row.data.id) end)
+		row.close:SetSize(56, 18)
+		row.close:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+		row.action = Button(row, "", 70, function()
+			local g = row.data
+			if g.author == P.me then
+				P.InviteGroup(g.id)
+			else
+				local joined = g.joiners[P.me] and g.joiners[P.me].role ~= "X"
+				local ok, err = P.JoinGroup(g.id, not joined)
+				if not ok then P.Print(err) end
+			end
+		end)
+		row.action:SetSize(70, 18)
+		row.action:SetPoint("RIGHT", row, "RIGHT", -64, 0)
+		row:SetScript("OnEnter", function(self)
+			local g = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(g.activity)
+			GameTooltip:AddLine(("%s%s, %d min left"):format(ClassName(g.author),
+				P.ROLE_NAME[g.role or ""] and (" (" .. P.ROLE_NAME[g.role] .. ")") or "", P.GroupMinutesLeft(g)), 1, 1, 1)
+			if g.min and g.min > 0 then GameTooltip:AddLine(("Levels %d to %d"):format(g.min, g.max), 0.8, 0.8, 0.8) end
+			GameTooltip:AddLine("Needs: " .. (g.need ~= "" and P.RoleNames(g.need) or "anyone"), 0.8, 0.8, 0.8)
+			for _, j in ipairs(P.GroupJoiners(g)) do
+				GameTooltip:AddLine(("%s%s|r  %s"):format(ROLE_COLOR[j.role] or "", P.ROLE_NAME[j.role] or "?", ClassName(j.name)), 1, 1, 1)
+			end
+			GameTooltip:Show()
+		end)
+	end, -138, 66)
+
+	local empty = Label(panel, "Nobody is looking for a group. Post something and see who bites.", "GameFontDisable")
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -30)
+
+	-- Bottom: who else could come, from the roster
+	local could = Label(panel)
+	could:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	could:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 10)
+	could:SetHeight(44)
+	could:SetWordWrap(true)
+	could:SetMaxLines(3)
+	could:SetJustifyV("BOTTOM")
+
+	function panel:Refresh()
+		role:SetText("My role: " .. P.ROLE_NAME[P.MyRole()])
+		for r, check in pairs(checks) do check:SetChecked(need[r]) end
+		local rows = P.GroupList()
+		list:SetRows(rows)
+		empty:SetShown(#rows == 0)
+
+		-- For the player's own listing, else for the dungeon picked above.
+		local mine = P.MyGroup()
+		local what, min, max
+		if mine and mine.min and mine.min > 0 then
+			what, min, max = mine.activity, mine.min, mine.max
+		elseif picked then
+			what, min, max = picked[1], picked[2], picked[3]
+		end
+		if not what then
+			could:SetText("|cff999999Pick a dungeon to see which online guildmates are in its level range, addon or not.|r")
+		else
+			local parts = {}
+			for i, m in ipairs(P.CouldCome(min, max, mine)) do
+				if i > 14 then parts[15] = "..." break end
+				parts[i] = ("%s |cff999999%d|r"):format(P.ClassColored(P.ShortName(m.name), m.class), m.level)
+			end
+			could:SetText(#parts > 0 and ("|cffdb8f45Online and level %d-%d for %s:|r  %s"):format(min, max, what, table.concat(parts, ", "))
+				or ("|cff999999Nobody else online is level %d-%d right now.|r"):format(min, max))
+		end
+	end
+end
+
 for _, tab in ipairs({
 	{ "Race", BuildRace },
 	{ "Board", BuildBoard },
@@ -652,3 +823,5 @@ for _, tab in ipairs({
 }) do
 	tinsert(P.tabs, tab)
 end
+-- The most used tab sits right under the roster.
+tinsert(P.tabs, 2, { "Groups", BuildGroups })

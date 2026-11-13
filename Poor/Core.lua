@@ -696,7 +696,7 @@ local DEFAULT_OPTS = {
 	-- Gold is private until the player says otherwise: sharing starts off, and
 	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
 	showOffline = false, share = false, shareAsked = false, wizardDone = false, minimap = true, angle = 215, greet = true,
-	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true }
+	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true, groupNotify = true }
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.
@@ -787,7 +787,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
@@ -811,6 +811,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.PruneFunds()
 		P.PruneBoard()
 		P.PrunePledges()
+		P.PruneGroups()
 		P.db.myChars[P.me] = true
 		P.CommInit()
 		P.MinimapInit()
