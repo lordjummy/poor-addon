@@ -41,7 +41,7 @@ local STEPS = {
 		build = function(page)
 			Text(page, "This is the guild's addon: the roster, events, funds and lotteries, who can craft what, PvP alerts, "
 				.. "and a leaderboard of who among us is the poorest.", 0)
-			Text(page, "Three quick questions and you are set. Everything can be changed later under Options, "
+			Text(page, "A few quick questions and you are set. Everything can be changed later under Options, "
 				.. "and you can skip this at any point.", -62)
 			Text(page, "Open the window any time with |cffffffff/poor|r or the copper coin on your minimap.", -112, "GameFontDisable")
 		end,
@@ -107,10 +107,60 @@ local STEPS = {
 		end,
 	},
 	{
+		title = "Your professions",
+		live = true,
+		build = function(page)
+			page.intro = Text(page, "", 0)
+			page.rows = {}
+			for i = 1, 6 do
+				local row = CreateFrame("Frame", nil, page)
+				row:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -50 - (i - 1) * 24)
+				row:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -50 - (i - 1) * 24)
+				row:SetHeight(22)
+				row.name = Label(row)
+				row.name:SetPoint("LEFT", row, "LEFT", 0, 0)
+				row.name:SetWidth(150)
+				row.status = Label(row)
+				row.status:SetPoint("LEFT", row, "LEFT", 156, 0)
+				row.status:SetWidth(190)
+				row.open = Button(row, "Open", 64, function() P.OpenProfession(row.line) end)
+				row.open:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+				page.rows[i] = row
+			end
+		end,
+		show = function(page)
+			local profs, missing = P.MyProfessions(), 0
+			for i, row in ipairs(page.rows) do
+				local p = profs[i]
+				row:SetShown(p ~= nil)
+				if p then
+					row.line = p.line
+					row.name:SetText(("%s |cff999999%d|r"):format(p.name, p.rank))
+					if p.recipes then
+						row.status:SetText(("|cff40ff40shared|r  %d recipes"):format(p.recipes))
+					else
+						missing = missing + 1
+						row.status:SetText(p.catalogue and "|cff999999no recipes known|r" or "|cffffd100not read yet|r")
+					end
+					row.open:SetShown(not p.recipes)
+				end
+			end
+			if #profs == 0 then
+				page.intro:SetText("This character has no professions yet. When it learns one, its recipes are shared with the guild "
+					.. "so members can find who can craft what.")
+			elseif missing == 0 then
+				page.intro:SetText("Your recipes are shared, so guildmates can find you when they need something made. Nothing to do here.")
+			else
+				page.intro:SetText("Guildmates can look up who can craft what. Press Open on each profession marked \"not read yet\" "
+					.. "and its recipes are picked up within a few seconds. Gathering skills have none.")
+			end
+		end,
+	},
+	{
 		title = "All set",
 		build = function(page)
 			Text(page, "That is everything. A few things worth knowing:", 0)
-			Text(page, "- Your recipes are shared automatically. If a profession shows none, open its window once.\n"
+			Text(page, "- Recipes you learn later are added automatically.\n"
 				.. "- Events, funds and lotteries appear on their tabs as officers create them.\n"
 				.. "- Only guildmates who have the addon see what you share.", -28)
 			Text(page, "Run this again with |cffffffff/poor setup|r.", -112, "GameFontDisable")
@@ -227,6 +277,15 @@ local function Offer()
 	if InCombatLockdown and InCombatLockdown() then return C_Timer.After(15, Offer) end
 	P.ShowWizard()
 end
+
+-- Keep the professions step current while it is on screen: recipes arrive a
+-- moment after a profession window opens.
+local function Live()
+	-- Only that step: redrawing the others would wipe what is being typed.
+	if frame and frame:IsShown() and STEPS[step].live then STEPS[step].show(pages[step]) end
+end
+P.On("Blob", Live)
+P.On("Crafts", Live)
 
 P.On("Started", function()
 	if not P.db.opts.wizardDone then C_Timer.After(4, Offer) end

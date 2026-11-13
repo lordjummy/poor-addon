@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.8
+
+- The setup has a step for your professions: it shows which are shared and opens the ones not read yet with one button.
+
 ## 0.9.7
 
 - Recipes are shared automatically. Once anyone in the guild has opened a profession's window, every member with that profession has their recipes read without opening anything, and newly learned recipes are added as you learn them.

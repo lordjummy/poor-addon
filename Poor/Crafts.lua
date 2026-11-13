@@ -32,12 +32,14 @@ end
 
 local function Collector()
 	local list, has = {}, {}
-	return list, function(name, rank, max)
+	return list, function(name, rank, max, line)
 		if not (P.Readable(name) and P.Readable(rank) and P.Readable(max)) or type(name) ~= "string" or name == "" then return end
 		name = name:gsub("[:,%^=]", "")
 		if has[name] then return end
 		has[name] = true
-		tinsert(list, { name = name, rank = tonumber(rank) or 0, max = tonumber(max) or 0 })
+		-- `line` is the profession's skill line id, which opens its window.
+		tinsert(list, { name = name, rank = tonumber(rank) or 0, max = tonumber(max) or 0,
+			line = (P.Readable(line) and tonumber(line)) or nil })
 	end
 end
 
@@ -48,8 +50,8 @@ local function FromSlots()
 	local slots = { GetProfessions() }
 	for i = 1, select("#", GetProfessions()) do
 		if slots[i] then
-			local name, _, rank, max = GetProfessionInfo(slots[i])
-			add(name, rank, max)
+			local name, _, rank, max, _, _, line = GetProfessionInfo(slots[i])
+			add(name, rank, max, line)
 		end
 	end
 	return list
@@ -129,7 +131,12 @@ UpdateSkills = function()
 		if s.window and not found[s.name] then tinsert(list, s) end
 	end
 	if #list == 0 and old then return end
-	if old and Pack(old.list) == Pack(list) then return end
+	local function Lines(l)
+		local parts = {}
+		for i, s in ipairs(l) do parts[i] = tostring(s.line) end
+		return table.concat(parts, ",")
+	end
+	if old and Pack(old.list) == Pack(list) and Lines(old.list) == Lines(list) then return end
 	-- Recipes of a profession this character dropped are withdrawn, but only
 	-- when reading demonstrably works (it found something).
 	if readSomething then
@@ -516,6 +523,28 @@ P.On("Blob", function(key)
 	if type(key) == "string" and key:sub(1, 2) == "C:" then Soon("auto", AutoRead, 3) end
 end)
 P.On("Crafts", function() Soon("auto", AutoRead, 3) end)
+
+--- This character's professions with what has been read of each:
+--- { name, rank, max, line, recipes (number or nil), catalogue (bool) }
+function P.MyProfessions()
+	local out, mine = {}, P.db.profs[P.me]
+	for _, s in ipairs(mine and mine.list or {}) do
+		local blob = P.GetBlob("R:" .. P.me .. ":" .. s.name)
+		tinsert(out, { name = s.name, rank = s.rank, max = s.max, line = s.line,
+			recipes = blob and #blob.tokens > 0 and #blob.tokens or nil,
+			catalogue = P.GetBlob("C:" .. s.name) ~= nil })
+	end
+	return out
+end
+
+--- Open a profession's window, as clicking it in the spellbook would.
+function P.OpenProfession(line)
+	if not line then return P.Print("Open that profession from your spellbook.") end
+	if InCombatLockdown and InCombatLockdown() then return P.Print("Not in combat.") end
+	if not (C_TradeSkillUI and C_TradeSkillUI.OpenTradeSkill) then return P.Print("Open that profession from your spellbook.") end
+	local ok = pcall(C_TradeSkillUI.OpenTradeSkill, line)
+	if not ok then P.Print("Could not open it. Open that profession from your spellbook.") end
+end
 
 --- Look at the skill list again (the Crafters tab asks when it opens).
 function P.RefreshSkills()
