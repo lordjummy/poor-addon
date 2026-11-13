@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.4
+
+**Everyone needs this version: it cannot sync with older ones.**
+
+- Fixes data not matching between members. Recipes, bank contents and alt links from other members were being thrown away, and funds could show the wrong keeper.
+- Profession windows are recognised more reliably, so more recipes are picked up.
+
 ## 0.9.3
 
 - A short setup appears the first time the addon runs: sharing your gold, your main character, PvP alerts. `/poor setup` shows it again.

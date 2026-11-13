@@ -189,7 +189,9 @@ function P.DebugSkills(out)
 		if owner == P.me then tinsert(recipes, prof .. " " .. #blob.tokens) end
 	end
 	out("Recipes read from profession windows: " .. (#recipes > 0 and table.concat(recipes, ", ") or "none"))
-	out("Last profession window read: " .. (P.lastWindowRead or "never"))
+	out("Profession window reads this session, newest first:")
+	if #P.windowLog == 0 then out("  none") end
+	for _, line in ipairs(P.windowLog) do out("  " .. line) end
 end
 
 P.SelfReport("profs", function()
@@ -254,6 +256,13 @@ local function Merge(prof, found)
 	P.SetBlob(key, tokens)
 end
 
+-- What the last few looks at a profession window found, for /poor debug.
+P.windowLog = {}
+local function Log(text)
+	tinsert(P.windowLog, 1, date("%H:%M:%S ") .. text)
+	P.windowLog[9] = nil
+end
+
 -- Forever and retail: the ProfessionsFrame window, read through C_TradeSkillUI.
 -- Each learned recipe is kept as "s<recipe spell id>".
 local function ScanProfessionsFrame()
@@ -262,14 +271,28 @@ local function ScanProfessionsFrame()
 	-- Someone else's linked profession, or the guild's, is not this character's.
 	if (T.IsTradeSkillLinked and T.IsTradeSkillLinked()) or (T.IsTradeSkillGuild and T.IsTradeSkillGuild())
 		or (T.IsNPCCrafting and T.IsNPCCrafting()) then
-		P.lastWindowRead = "skipped: not this character's own profession"
-		return
+		return Log("skipped: not this character's own profession")
 	end
 	local info = T.GetBaseProfessionInfo()
-	local prof = type(info) == "table" and (info.professionName or info.parentProfessionName) or nil
+	if type(info) ~= "table" then return Log("the window reported no profession") end
+	-- The profession's name. The window does not always give one, so the
+	-- character's own profession slots are asked first, by skill line.
+	local prof
+	if GetProfessions and GetProfessionInfo then
+		local slots = { GetProfessions() }
+		for i = 1, select("#", GetProfessions()) do
+			if slots[i] then
+				local name, _, _, _, _, _, line = GetProfessionInfo(slots[i])
+				if P.Readable(line) and line and (line == info.professionID or line == info.parentProfessionID) then prof = name end
+			end
+		end
+	end
+	for _, field in ipairs({ "professionName", "parentProfessionName" }) do
+		if not prof and P.Readable(info[field]) and info[field] and info[field] ~= "" then prof = info[field] end
+	end
 	if not P.Readable(prof) or not prof or prof == "" then
-		P.lastWindowRead = "no profession reported by the window"
-		return
+		-- Also what an event after the window closed looks like.
+		return Log(("no profession name (id %s, parent %s)"):format(tostring(info.professionID), tostring(info.parentProfessionID)))
 	end
 	local found, total, learned = {}, 0, 0
 	for _, id in ipairs(T.GetAllRecipeIDs() or {}) do
@@ -280,7 +303,7 @@ local function ScanProfessionsFrame()
 			learned = learned + 1
 		end
 	end
-	P.lastWindowRead = ("%s: %d recipes listed, %d learned"):format(prof, total, learned)
+	Log(("%s: %d recipes listed, %d learned"):format(prof, total, learned))
 	NoteFromWindow(prof, info.skillLevel, info.maxSkillLevel)
 	Merge(prof, found)
 end

@@ -21,7 +21,7 @@
 --   M alts, X hall of shame, B begging board, P professions, N/W/L bulky data: see those files
 local _, P = ...
 
-local PROTOCOL = 1
+local PROTOCOL = 2 -- 2: Forever names carry no realm tag (0.9.4)
 local PREFIX = "POOR" .. PROTOCOL
 local VERSION_PREFIX = "POORV"
 local MAX_LEN = 240     -- addon messages cap at 255 bytes

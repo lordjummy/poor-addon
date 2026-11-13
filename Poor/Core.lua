@@ -40,22 +40,45 @@ end
 --
 -- WoW Forever characters have a first name and a surname ("Pink Guy"), and
 -- the game functions that return "name, realm" elsewhere return "first name,
--- surname" there. The guild roster and addon-message senders use
--- "First Surname-Realm", which is the form kept everywhere in this addon.
+-- surname" there. Players do not see realms on Forever, but each client has
+-- an internal one (CAMWOWUS2Realm4PvP, ...Realm6PvP) and guildmates are on
+-- different ones. The roster and message senders give bare names, so a name
+-- tagged with the local realm would be a different text on every client.
+-- On Forever a character is therefore known by "First Surname" alone.
+-- On other clients it is "Name-Realm".
 local INTERFACE = select(4, GetBuildInfo())
 P.FOREVER = (WOW_PROJECT_CAMELOT ~= nil and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT)
 	or (type(INTERFACE) == "number" and INTERFACE >= 16000 and INTERFACE < 20000) or false
 
 local myRealm
+
+--- A Forever name without a realm tag, whichever client's realm it carries.
+local function StripRealm(name)
+	myRealm = myRealm or GetNormalizedRealmName()
+	if myRealm and #name > #myRealm + 1 and name:sub(-#myRealm - 1) == "-" .. myRealm then
+		return name:sub(1, -#myRealm - 2)
+	end
+	local base, suffix = name:match("^(.+)%-([^%-%s]+)$")
+	if base and (suffix:find("^CAM") or suffix:find("Realm", 1, true)) then return base end
+	return name
+end
+P.StripRealm = StripRealm
+
+--- The one way a character's name is written everywhere in the addon.
 function P.FullName(name)
 	if not P.Readable(name) or name == "" then return nil end
+	if P.FOREVER then
+		name = StripRealm(name)
+		-- Some sources write a Forever name as "First-Surname".
+		if name:find("-", 1, true) and not P.members[name] then
+			local spaced = name:gsub("-", " ", 1)
+			if P.members[spaced] then return spaced end
+		end
+		return name
+	end
+	if name:find("-", 1, true) then return name end
 	myRealm = myRealm or GetNormalizedRealmName()
-	if not name:find("-", 1, true) then return myRealm and (name .. "-" .. myRealm) or name end
-	if P.members[name] or not myRealm then return name end
-	-- Some sources write a Forever name as "First-Surname".
-	local spaced = name:gsub("-", " ", 1) .. "-" .. myRealm
-	if P.members[spaced] then return spaced end
-	return name
+	return myRealm and (name .. "-" .. myRealm) or name
 end
 
 --- "Name-Realm" of a unit ("player", "target", "NPC" for a trade partner).
@@ -68,6 +91,7 @@ function P.UnitFullName(unit)
 end
 
 function P.ShortName(full)
+	if P.FOREVER then return StripRealm(full) end
 	myRealm = myRealm or GetNormalizedRealmName()
 	if myRealm and #full > #myRealm + 1 and full:sub(-#myRealm - 1) == "-" .. myRealm then
 		return full:sub(1, -#myRealm - 2)
@@ -80,6 +104,51 @@ end
 function P.WhisperTarget(full)
 	if P.FOREVER then return (P.ShortName(full):gsub(" ", "-")) end
 	return full
+end
+
+--- Versions before 0.9.4 tagged Forever names with the local realm. Rewrite
+--- everything stored to bare names, once. Every client does the same, so
+--- the copies agree again without anything having to be resent.
+function P.MigrateNames()
+	local db = P.db
+	if not P.FOREVER or db.namesV2 then return end
+	db.namesV2 = true
+	local function canon(name)
+		return type(name) == "string" and StripRealm(name) or name
+	end
+	local function rekey(t)
+		local moved = {}
+		for k in pairs(t or {}) do
+			local c = canon(k)
+			if c ~= k then moved[k] = c end
+		end
+		for k, c in pairs(moved) do
+			if t[c] == nil then t[c] = t[k] end
+			t[k] = nil
+		end
+	end
+	for _, key in ipairs({ "gold", "history", "shame", "profs", "mains", "myChars", "roles", "bankChars", "bankScan", "xp", "levels", "race" }) do
+		rekey(db[key])
+	end
+	for _, link in pairs(db.mains or {}) do link.main = canon(link.main) end
+	local blobs = {}
+	for key, blob in pairs(db.blobs or {}) do
+		local kind, owner, rest = key:match("^(%a):([^:]+)(.*)$")
+		local to = kind and (kind .. ":" .. canon(owner) .. rest) or key
+		if not blobs[to] or blobs[to].ts < blob.ts then blobs[to] = blob end
+	end
+	db.blobs = blobs
+	for _, e in pairs(db.events or {}) do
+		e.author = canon(e.author)
+		rekey(e.signups)
+	end
+	for _, f in pairs(db.funds or {}) do
+		f.collector, f.winner = canon(f.collector), canon(f.winner)
+		for _, d in pairs(f.entries or {}) do d.name = canon(d.name) end
+	end
+	for _, r in pairs(db.board or {}) do r.author, r.helper = canon(r.author), canon(r.helper) end
+	for _, p in pairs(db.pledges or {}) do p.from = canon(p.from) end
+	for _, a in ipairs(db.alertLog or {}) do a.from = canon(a.from) end
 end
 
 --- Move everything stored under one character name to another. Used when
@@ -725,6 +794,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "PLAYER_LOGIN" then
 		local first, second = UnitName("player")
+		P.MigrateNames()
 		P.me = P.UnitFullName("player") or (tostring(first) .. "-" .. (GetNormalizedRealmName() or ""))
 		-- Versions before 0.8.4 took a Forever surname for a realm and kept
 		-- this character as "First-Surname". Move what they stored.
