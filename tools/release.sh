@@ -42,6 +42,7 @@ mkdir -p dist
 archive="dist/poor-$version.zip"
 rm -f "$archive"
 zip -q -r "$archive" Poor
+printf '%s\n' "$changelog" > "dist/notes-$version.md"   # the GitHub release uses this as its text
 echo "Built $archive ($(unzip -l "$archive" | tail -1 | awk '{print $2}') files), game version $game_version, type $release_type"
 
 if [ "$dry" = "--dry-run" ]; then

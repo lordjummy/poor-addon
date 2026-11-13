@@ -1,17 +1,31 @@
-# Pushing a tag like v0.9.2 builds the addon zip and uploads it to CurseForge.
-# Needs the repository secret CF_API_KEY (a CurseForge API token).
+# Pushing a tag like v0.9.2 publishes that version:
+#   1. a GitHub release with the addon zip attached, which WowUp's
+#      "Install from URL" follows for updates;
+#   2. an upload to CurseForge (needs the repository secret CF_API_KEY).
 name: Release
 
 on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write # to create the GitHub release
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build and upload to CurseForge
+      - name: Build the zip
+        run: bash tools/release.sh "$GITHUB_REF_NAME" --dry-run
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "dist/poor-$version.zip" \
+            --title "$version" --notes-file "dist/notes-$version.md"
+      - name: Upload to CurseForge
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: bash tools/release.sh "$GITHUB_REF_NAME"
