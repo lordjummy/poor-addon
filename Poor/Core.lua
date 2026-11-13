@@ -696,7 +696,7 @@ local DEFAULT_OPTS = {
 	-- Gold is private until the player says otherwise: sharing starts off, and
 	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
 	showOffline = false, share = false, shareAsked = false, wizardDone = false, minimap = true, angle = 215, greet = true,
-	alerts = true, alertPin = true, alertChat = true }
+	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true }
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.

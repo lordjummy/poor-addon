@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.10
+
+- PvP alerts: the sound, on-screen warning and map pin now fire only if you are in the same zone. Alerts from elsewhere are a quiet chat line. An option turns the full warning back on for every alert.
+
 ## 0.9.9
 
 - Crafters tab: clicking a recipe opens a whisper to the crafter with the request already typed.

@@ -99,11 +99,12 @@ local STEPS = {
 		title = "PvP alerts",
 		build = function(page)
 			Text(page, "Anyone can tell the guild where a fight is with one button. Choose what happens when someone does.", 0)
-			Option(page, "alerts", "Warn me when a guildmate sends a PvP alert", -48)
-			Option(page, "alertPin", "Pin the place on my map (replaces a pin I had set)", -72)
-			Option(page, "alertChat", "When I send one, post it in guild chat too", -96)
+			Option(page, "alerts", "Tell me when a guildmate sends a PvP alert", -40)
+			Option(page, "alertZoneOnly", "Sound and on-screen warning only for my own zone", -64)
+			Option(page, "alertPin", "Pin the place on my map (replaces a pin I had set)", -88)
+			Option(page, "alertChat", "When I send one, post it in guild chat too", -112)
 			Text(page, "Send an alert with the red button in the window, with |cffffffff/poor pvp|r, or with a key you set under "
-				.. "Options > Keybindings > poor.", -128, "GameFontDisable")
+				.. "Options > Keybindings > poor.", -142, "GameFontDisable")
 		end,
 	},
 	{

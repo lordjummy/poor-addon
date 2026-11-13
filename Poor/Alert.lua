@@ -135,6 +135,15 @@ end
 ---------------------------------------------------------------------------
 -- Receiving (called from Comm.lua)
 ---------------------------------------------------------------------------
+--- Is this player in the zone an alert came from? By map, or by zone name
+--- where the maps differ (a town inside a zone has a map of its own).
+local function SameZone(mapID, zone)
+	local myMap = C_Map.GetBestMapForUnit("player")
+	if mapID and mapID > 0 and P.Readable(myMap) and myMap == mapID then return true end
+	local myZone = GetRealZoneText()
+	return zone ~= "" and P.Readable(myZone) and myZone == zone
+end
+
 function P.OnAlert(sender, mapID, x, y, zone, sub, note)
 	if not P.db.opts.alerts then return end
 	local now = GetTime()
@@ -149,11 +158,19 @@ function P.OnAlert(sender, mapID, x, y, zone, sub, note)
 	Log({ from = sender, mapID = hasPos and mapID or nil, x = x, y = y, zone = zone, sub = sub, note = note, ts = P.Now() })
 	local who, place = P.ShortName(sender), PlaceText(zone, sub, x, y)
 	local m = P.members[sender]
-	P.Print(("|cffff4040PvP!|r %s at |cffffffff%s|r%s"):format(P.ClassColored(who, m and m.class), place,
-		note ~= "" and (": " .. note) or ""))
-	Warn(("PvP! %s at %s"):format(who, place))
-	if hasPos and P.db.opts.alertPin then
-		SetPin(mapID, x, y, "PvP: " .. who)
+	local name, tail = P.ClassColored(who, m and m.class), note ~= "" and (": " .. note) or ""
+
+	-- A fight in the zone the player is standing in gets the full warning.
+	-- One elsewhere is a quiet chat line, unless they asked to be warned of all.
+	local here = SameZone(mapID, zone)
+	if here or not P.db.opts.alertZoneOnly then
+		P.Print(("|cffff4040PvP%s|r %s at |cffffffff%s|r%s"):format(here and " in your zone!" or "!", name, place, tail))
+		Warn(("PvP! %s at %s"):format(who, place))
+		if hasPos and P.db.opts.alertPin then
+			SetPin(mapID, x, y, "PvP: " .. who)
+		end
+	else
+		P.Print(("|cffff9050PvP elsewhere:|r %s at |cffffffff%s|r%s  |cff999999(the Alerts tab can pin it)|r"):format(name, place, tail))
 	end
 end
 

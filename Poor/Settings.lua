@@ -27,6 +27,8 @@ local ROWS = {
 	{ header = "PvP alerts" },
 	{ key = "alerts", label = "Receive PvP alerts",
 		tip = "Show a warning and play a sound when a guildmate sends a PvP alert." },
+	{ key = "alertZoneOnly", label = "Full warning only for my own zone",
+		tip = "On: the on-screen warning, the sound and the map pin are for alerts from the zone you are in. Alerts from elsewhere are a quiet chat line. Off: every alert gets the full warning." },
 	{ key = "alertPin", label = "Pin the location of incoming alerts",
 		tip = "Set your map pin (and a TomTom arrow, if installed) where the alert came from. This replaces a pin you had set." },
 	{ key = "alertChat", label = "Post my alerts in guild chat",
