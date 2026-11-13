@@ -813,12 +813,204 @@ local function BuildGroups(panel)
 	end
 end
 
+---------------------------------------------------------------------------
+-- Recruit: where the guild is thin, what is wanted, and who is out there
+---------------------------------------------------------------------------
+local function BuildRecruit(panel)
+	local SIDE = 190
+	local chosen -- class token picked on the left
+
+	-- Left: the guild by class, thinnest first
+	local side = CreateFrame("Frame", nil, panel)
+	side:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+	side:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 0)
+	side:SetWidth(SIDE)
+	local divider = side:CreateTexture(nil, "ARTWORK")
+	divider:SetColorTexture(P.ui.COLOR.line[1], P.ui.COLOR.line[2], P.ui.COLOR.line[3], P.ui.COLOR.line[4])
+	divider:SetWidth(1)
+	divider:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, -58)
+	divider:SetPoint("BOTTOMRIGHT", side, "BOTTOMRIGHT", 0, 30)
+
+	local picker = List(side, { { "Class", 100 }, { "Active", 48, "RIGHT" } }, function(row, e)
+		row.cells[1]:SetText(P.ClassColored(P.ClassLabel(e.class), e.class) .. (P.IsWanted(e.class) and "  |cffffd100wanted|r" or ""))
+		row.cells[2]:SetText((e.active == 0 and "|cffff4040" or "|cffffffff") .. e.active .. "|r|cff999999/" .. e.total .. "|r")
+		row.selection:SetShown(e.class == chosen)
+		row.mark:SetShown(e.class == chosen)
+	end, function(row)
+		row.selection = P.ui.Fill(row, "BACKGROUND", { 1, 1, 1, 0.08 })
+		row.mark = row:CreateTexture(nil, "ARTWORK")
+		row.mark:SetColorTexture(P.ui.ACCENT[1], P.ui.ACCENT[2], P.ui.ACCENT[3], 1)
+		row.mark:SetPoint("TOPLEFT")
+		row.mark:SetPoint("BOTTOMLEFT")
+		row.mark:SetWidth(2)
+		row:SetScript("OnClick", function(self)
+			chosen = self.data.class
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+			panel:Refresh()
+		end)
+		row:SetScript("OnEnter", function(self)
+			local e = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(P.ClassColored(P.ClassLabel(e.class), e.class))
+			GameTooltip:AddLine(("%d in the guild, %d active in the last two weeks, %d online, %d at level %d."):format(
+				e.total, e.active, e.online, e.capped, P.MAX_LEVEL), 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+	end, -78, 30)
+
+	-- Right: the wanted list, the search, the candidates
+	local detail = CreateFrame("Frame", nil, panel)
+	detail:SetPoint("TOPLEFT", panel, "TOPLEFT", SIDE, 0)
+	detail:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+
+	local heading = Label(detail, nil, "GameFontNormal")
+	heading:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -63)
+	heading:SetWidth(340)
+	local want = Button(detail, "", 104, function()
+		if not chosen then return end
+		local ok, err = P.SetWanted(chosen, not P.IsWanted(chosen))
+		if not ok then P.Print(err) end
+	end)
+	want:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -62)
+
+	local levelLabel = Label(detail, "Levels", "GameFontNormalSmall")
+	levelLabel:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -92)
+	local minBox = EditBox(detail, 36, 2)
+	minBox:SetPoint("LEFT", levelLabel, "RIGHT", 8, 0)
+	local toLabel = Label(detail, "to", "GameFontNormalSmall")
+	toLabel:SetPoint("LEFT", minBox, "RIGHT", 6, 0)
+	local maxBox = EditBox(detail, 36, 2)
+	maxBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
+	local find = Button(detail, "", 190, function()
+		if not chosen then return end
+		local ok, err = P.FindRecruits(chosen, tonumber(minBox:GetText()), tonumber(maxBox:GetText()))
+		if not ok then P.Print(err) end
+	end)
+	find:SetPoint("LEFT", maxBox, "RIGHT", 10, 0)
+	find:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Search who is online")
+		GameTooltip:AddLine("Asks the server for players of this class and level, and lists the ones without a guild. "
+			.. "The server answers with about 50 players at most, so a narrow level range finds more.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	find:SetScript("OnLeave", GameTooltip_Hide)
+
+	local pitchLabel = Label(detail, "Pitch", "GameFontNormalSmall")
+	pitchLabel:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -118)
+	local pitchBox = EditBox(detail, 340, P.PITCH_MAX)
+	pitchBox:SetPoint("LEFT", pitchLabel, "RIGHT", 8, 0)
+	local pitchSave = Button(detail, "Save", 50, function()
+		local ok, err = P.SetPitch(pitchBox:GetText())
+		if not ok then return P.Print(err) end
+		pitchBox:ClearFocus()
+	end)
+	pitchSave:SetPoint("LEFT", pitchBox, "RIGHT", 6, 0)
+	pitchSave:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("The opening line")
+		GameTooltip:AddLine("What is typed into the whisper for everyone in the guild who recruits. {class} becomes the class name.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	pitchSave:SetScript("OnLeave", GameTooltip_Hide)
+	local pitchText = Label(detail)
+	pitchText:SetPoint("LEFT", pitchLabel, "RIGHT", 8, 0)
+	pitchText:SetWidth(400)
+	pitchText:SetTextColor(0.75, 0.75, 0.75)
+
+	local list = List(detail, {
+		{ "Player", 120 }, { "Lvl", 36, "RIGHT" }, { "", 6 }, { "Zone", 90 }, { "", 56 },
+	}, function(row, c)
+		local cells = row.cells
+		local done = P.Approached(c.name)
+		cells[1]:SetText(P.ClassColored(P.ShortName(c.name), c.class))
+		cells[2]:SetText(c.level)
+		cells[4]:SetText(c.zone)
+		cells[5]:SetText(done and ("|cff999999" .. done.what .. "|r") or "")
+		row.invite:SetShown(P.CanInviteToGuild())
+		row:SetAlpha(done and 0.6 or 1)
+	end, function(row)
+		row.invite = Button(row, "Invite", 54, function() P.InviteToGuild(row.data) end)
+		row.invite:SetSize(54, 18)
+		row.invite:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+		row.whisper = Button(row, "Whisper", 62, function() P.PitchTo(row.data) end)
+		row.whisper:SetSize(62, 18)
+		row.whisper:SetPoint("RIGHT", row, "RIGHT", -62, 0)
+		row:SetScript("OnEnter", function(self)
+			local c = self.data
+			local done = P.Approached(c.name)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(P.ClassColored(P.ShortName(c.name), c.class))
+			GameTooltip:AddLine(("Level %d %s in %s, no guild."):format(c.level, P.ClassLabel(c.class), c.zone ~= "" and c.zone or "an unknown place"), 1, 1, 1, true)
+			if done then GameTooltip:AddLine(("You %s them %s."):format(done.what, P.Ago(done.ts)), 0.8, 0.8, 0.8) end
+			GameTooltip:AddLine("Whisper opens the chat box with the pitch typed. Nothing is sent until you press Enter.", 0.6, 0.6, 0.6, true)
+			GameTooltip:Show()
+		end)
+	end, -164, 46)
+
+	local empty = Label(detail, nil, "GameFontDisable")
+	empty:SetPoint("CENTER", detail, "CENTER", -10, -40)
+	empty:SetWidth(400)
+	empty:SetWordWrap(true)
+	empty:SetJustifyH("CENTER")
+	local footer = Label(panel)
+	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 10)
+	footer:SetTextColor(0.6, 0.6, 0.6)
+
+	local shownPitch
+
+	function panel:Refresh()
+		local rows = P.Composition()
+		if not chosen then
+			-- Start on a wanted class, else on the thinnest one.
+			for _, e in ipairs(rows) do
+				if not chosen and P.IsWanted(e.class) then chosen = e.class end
+			end
+			chosen = chosen or (rows[1] and rows[1].class)
+		end
+		picker:SetRows(rows)
+
+		local wanted, officer = P.WantedText(), P.AmOfficer()
+		heading:SetText(wanted and ("Recruiting: |cffffffff" .. wanted .. "|r") or "|cff999999No class marked as wanted|r")
+		want:SetShown(officer and chosen ~= nil)
+		if chosen then
+			want:SetText(P.IsWanted(chosen) and "Not wanted" or "Mark wanted")
+			find:SetText("Find unguilded " .. P.ClassLabel(chosen) .. "s")
+		end
+		find:SetShown(chosen ~= nil)
+		if minBox:GetText() == "" and maxBox:GetText() == "" then
+			local level = UnitLevel("player")
+			minBox:SetText(math.max(1, level - 5))
+			maxBox:SetText(math.min(P.MAX_LEVEL, level + 5))
+		end
+
+		-- Officers edit the pitch; everyone else reads it.
+		local pitch = P.Recruit().pitch
+		if not pitch or pitch == "" then pitch = P.DEFAULT_PITCH end
+		pitchBox:SetShown(officer)
+		pitchSave:SetShown(officer)
+		pitchText:SetShown(not officer)
+		pitchText:SetText(pitch)
+		if officer and shownPitch ~= pitch and not pitchBox:HasFocus() then
+			shownPitch = pitch
+			pitchBox:SetText(pitch)
+		end
+
+		list:SetRows(P.candidates)
+		empty:SetText("Pick a class on the left and press Find to look for players without a guild.")
+		empty:SetShown(#P.candidates == 0)
+		footer:SetText(P.candidateNote or "Whispers go one at a time, and only when you press Enter. Players you already approached are dimmed for a month.")
+	end
+end
+
 for _, tab in ipairs({
 	{ "Race", BuildRace },
 	{ "Board", BuildBoard },
 	{ "Shame", BuildShame },
 	{ "Bank", BuildBank },
 	{ "Crafters", BuildCrafters },
+	{ "Recruit", BuildRecruit },
 	{ "Alerts", BuildAlerts },
 }) do
 	tinsert(P.tabs, tab)

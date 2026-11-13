@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0
+
+- New Recruit tab: the guild by class with the thin ones first, a wanted list set by officers, and a search for unguilded players of a class to whisper or invite.
+
 ## 0.10.0
 
 - New Groups tab: post what you want to run and which roles you need, see who joins, invite them with one button. It also shows which online guildmates are in a dungeon's level range.

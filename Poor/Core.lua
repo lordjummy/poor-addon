@@ -317,6 +317,13 @@ function P.ScanRoster()
 				online = P.Readable(online) and online and true or false,
 				class = P.Readable(classFile) and classFile or nil,
 			}
+			-- Days since last seen, for telling active members from inactive ones.
+			if not m.online and GetGuildRosterLastOnline then
+				local years, months, days = GetGuildRosterLastOnline(i)
+				if P.Readable(years) and P.Readable(months) and P.Readable(days) and days then
+					m.days = (years or 0) * 365 + (months or 0) * 30 + days
+				end
+			end
 			tinsert(roster, m)
 			members[full] = m
 		end
@@ -787,7 +794,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
@@ -812,6 +819,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.PruneBoard()
 		P.PrunePledges()
 		P.PruneGroups()
+		P.PruneRecruitLog()
 		P.db.myChars[P.me] = true
 		P.CommInit()
 		P.MinimapInit()
