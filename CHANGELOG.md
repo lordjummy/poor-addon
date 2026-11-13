@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.5
+
+- Crafters tab: professions are listed on the left; pick one to see its crafters, best skill first.
+
 ## 0.9.4
 
 **Everyone needs this version: it cannot sync with older ones.**

@@ -303,13 +303,65 @@ local function BuildBank(panel)
 end
 
 ---------------------------------------------------------------------------
--- Crafters
+-- Crafters: professions down the left, the crafters of the chosen one on the
+-- right, a click further that crafter's recipes. Search looks through all.
 ---------------------------------------------------------------------------
 local function BuildCrafters(panel)
+	local SIDE = 190
 	local filter = ""
+	local chosen -- the profession picked on the left
 	local browse -- { char, prof } while one character's recipes are listed
-	local list = List(panel, {
-		{ "Profession", 230 }, { "Character", 130 }, { "Skill", 70 }, { "Recipes shared", 200 },
+
+	local function Online(char)
+		local m = P.members[char]
+		return char == P.me or (m ~= nil and m.online)
+	end
+
+	-- Left: professions ---------------------------------------------------
+	local side = CreateFrame("Frame", nil, panel)
+	side:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+	side:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 0)
+	side:SetWidth(SIDE)
+	local divider = side:CreateTexture(nil, "ARTWORK")
+	divider:SetColorTexture(P.ui.COLOR.line[1], P.ui.COLOR.line[2], P.ui.COLOR.line[3], P.ui.COLOR.line[4])
+	divider:SetWidth(1)
+	divider:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, -58)
+	divider:SetPoint("BOTTOMRIGHT", side, "BOTTOMRIGHT", 0, 30)
+
+	local picker = List(side, { { "Professions", 112 }, { "", 36, "RIGHT" } }, function(row, e)
+		row.cells[1]:SetText(e.prof)
+		row.cells[2]:SetText(e.online > 0 and ("|cff40ff40" .. e.online .. "|r/" .. e.count) or e.count)
+		local on = e.prof == chosen and filter == ""
+		row.selection:SetShown(on)
+		row.mark:SetShown(on)
+	end, function(row)
+		row.selection = P.ui.Fill(row, "BACKGROUND", { 1, 1, 1, 0.08 })
+		row.mark = row:CreateTexture(nil, "ARTWORK")
+		row.mark:SetColorTexture(P.ui.ACCENT[1], P.ui.ACCENT[2], P.ui.ACCENT[3], 1)
+		row.mark:SetPoint("TOPLEFT")
+		row.mark:SetPoint("BOTTOMLEFT")
+		row.mark:SetWidth(2)
+		row:SetScript("OnClick", function(self)
+			chosen, browse = self.data.prof, nil
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+			panel:Refresh()
+		end)
+		row:SetScript("OnEnter", function(self)
+			local e = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(e.prof)
+			GameTooltip:AddLine(("%d in the guild, %d online. Best skill %d."):format(e.count, e.online, e.best), 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+	end, -78, 30)
+
+	-- Right: crafters, recipes or search results --------------------------
+	local detail = CreateFrame("Frame", nil, panel)
+	detail:SetPoint("TOPLEFT", panel, "TOPLEFT", SIDE, 0)
+	detail:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+
+	local list = List(detail, {
+		{ "Character", 190 }, { "Skill", 92 }, { "", 44 }, { "Recipes shared", 116 },
 	}, function(row, e)
 		local c = row.cells
 		c[1]:SetText(e[1])
@@ -322,7 +374,6 @@ local function BuildCrafters(panel)
 		row:SetScript("OnClick", function(self, button)
 			local e = self.data
 			if e.open and button ~= "RightButton" then
-				-- A profession in the directory: list its recipes.
 				browse = e.open
 				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 				panel:Refresh()
@@ -355,40 +406,65 @@ local function BuildCrafters(panel)
 		end)
 	end)
 
-	SearchBox(panel, function(text)
+	local search = P.ui.SearchBox(detail, 170, function(text)
 		filter = text
 		if #text >= 2 then browse = nil end -- searching looks through everyone again
 		panel:Refresh()
 	end)
-	local back = Button(panel, "< Back", 64, function()
+	search:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -64)
+	local back = Button(detail, "< Back", 64, function()
 		browse = nil
 		panel:Refresh()
 	end)
-	back:SetPoint("TOPLEFT", panel, "TOPLEFT", 212, -64)
-	local hint = Label(panel)
-	hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 212, -68)
-	hint:SetWidth(430)
+	back:SetPoint("LEFT", search, "RIGHT", 10, 0)
+	local hint = Label(detail)
+	hint:SetWidth(270)
 	hint:SetTextColor(0.6, 0.6, 0.6)
 	local footer = Label(panel, nil, "GameFontNormalSmall")
 	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
-	local empty = Label(panel, nil, "GameFontDisable")
-	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
+	local empty = Label(detail, nil, "GameFontDisable")
+	empty:SetPoint("CENTER", detail, "CENTER", -10, -10)
+	empty:SetWidth(400)
+	empty:SetWordWrap(true)
+	empty:SetJustifyH("CENTER")
 
-	local function Online(char)
-		local m = P.members[char]
-		return char == P.me or (m ~= nil and m.online)
+	local function Heads(a, b, c, d)
+		list.heads[1]:SetText(a)
+		list.heads[2]:SetText(b)
+		list.heads[3]:SetText(c)
+		list.heads[4]:SetText(d)
 	end
 
 	function panel:Refresh()
 		P.RefreshSkills() -- cheap; only announces itself when something changed
+
+		-- Professions on the left, and which one is picked.
+		local all, byProf, profs = P.ProfessionList(), {}, {}
+		for _, r in ipairs(all) do
+			local e = byProf[r.prof]
+			if not e then
+				e = { prof = r.prof, count = 0, online = 0, best = 0 }
+				byProf[r.prof] = e
+				tinsert(profs, e)
+			end
+			e.count, e.best = e.count + 1, math.max(e.best, r.rank)
+			if r.online then e.online = e.online + 1 end
+		end
+		table.sort(profs, function(a, b) return a.prof < b.prof end)
+		if not byProf[chosen or ""] then
+			-- Start on one of the player's own professions when there is one.
+			local mine = P.db.profs[P.me]
+			chosen = (mine and mine.list[1] and byProf[mine.list[1].name] and mine.list[1].name) or (profs[1] and profs[1].prof) or nil
+		end
+		picker:SetRows(profs)
+
 		local rows = {}
 		local blob = browse and P.GetBlob("R:" .. browse.char .. ":" .. browse.prof)
 		if browse and not (blob and #blob.tokens > 0) then browse, blob = nil, nil end
 		back:SetShown(browse ~= nil)
 		hint:ClearAllPoints()
-		hint:SetPoint("TOPLEFT", panel, "TOPLEFT", browse and 284 or 212, -68)
-		hint:SetText(browse and ("%s of %s"):format(browse.prof, P.ShortName(browse.char))
-			or "Search for an item, or click a profession to see its recipes.")
+		hint:SetPoint("LEFT", browse and back or search, "RIGHT", 10, 0)
+
 		if browse then
 			-- One character's recipes
 			local loading = 0
@@ -402,63 +478,51 @@ local function BuildCrafters(panel)
 				if a.sort ~= b.sort then return a.sort < b.sort end
 				return a.token < b.token
 			end)
-			list.heads[1]:SetText("Recipe")
-			list.heads[2]:SetText("")
-			list.heads[3]:SetText("")
-			list.heads[4]:SetText("")
+			Heads("Recipe", "", "", "")
+			hint:SetText(("%s of %s"):format(browse.prof, P.ShortName(browse.char)))
 			empty:SetText("")
 			footer:SetText(("%d recipes%s"):format(#rows, loading > 0 and (", " .. loading .. " names still loading") or ""))
 		elseif #filter >= 2 then
-			-- Recipe search
+			-- Recipe search across the guild
 			local found, loading = P.FindRecipes(filter)
 			for _, r in ipairs(found) do
 				table.sort(r.crafters, function(a, b)
 					if Online(a) ~= Online(b) then return Online(a) end
 					return a < b
 				end)
-				local skill
-				local data = P.db.profs[r.crafters[1]]
-				for _, s in ipairs(data and data.list or {}) do
-					if s.name == r.prof then skill = s.rank end
-				end
-				tinsert(rows, { r.name, r.prof, skill or "", Names(r.crafters), sort = r.name:lower(),
+				tinsert(rows, { r.name, r.prof, "", Names(r.crafters), sort = r.name:lower(),
 					online = Online(r.crafters[1]), whisper = r.crafters[1],
 					tip = { r.name, r.prof, "Made by: " .. Names(r.crafters) } })
 			end
 			table.sort(rows, function(a, b) return a.sort < b.sort end)
-			list.heads[1]:SetText("Recipe")
-			list.heads[2]:SetText("Profession")
-			list.heads[3]:SetText("Skill")
-			list.heads[4]:SetText("Crafters (online first)")
+			Heads("Recipe", "Profession", "", "Crafters")
+			hint:SetText("Searching every profession. Online crafters come first.")
 			empty:SetText(loading > 0 and "Loading item names, one moment..." or "Nobody in the guild has shared a recipe like that.")
 			footer:SetText(("%d match%s%s"):format(#rows, #rows == 1 and "" or "es",
 				loading > 0 and (", " .. loading .. " names still loading") or ""))
 		else
-			-- Directory of professions
-			local counts, crafters, recipes = P.RecipeCounts(), {}, 0
-			for _, r in ipairs(P.ProfessionList()) do
-				local n = counts[r.char] and counts[r.char][r.prof]
-				if n then recipes = recipes + n end
-				crafters[r.char] = true
-				tinsert(rows, { r.prof, P.ClassColored(P.ShortName(r.char), r.class), ("%d / %d"):format(r.rank, r.max),
-					n and (n .. " recipes") or "|cff808080none yet|r", prof = r.prof, rank = r.rank, online = r.online, whisper = r.char,
-					open = n and { char = r.char, prof = r.prof } or nil,
-					tip = { P.ShortName(r.char) .. ": " .. r.prof,
-						n and (n .. " recipes shared.") or "No recipes shared yet. They are read when this character opens the profession window." } })
+			-- The crafters of the chosen profession, best first
+			local counts, recipes = P.RecipeCounts(), 0
+			for _, r in ipairs(all) do
+				if r.prof == chosen then
+					local n = counts[r.char] and counts[r.char][r.prof]
+					if n then recipes = recipes + n end
+					tinsert(rows, { P.ClassColored(P.ShortName(r.char), r.class), ("%d / %d"):format(r.rank, r.max), "",
+						n and (n .. " recipes") or "|cff808080none yet|r", rank = r.rank, online = r.online, whisper = r.char,
+						open = n and { char = r.char, prof = r.prof } or nil,
+						tip = { P.ShortName(r.char) .. ": " .. r.prof,
+							n and (n .. " recipes shared.") or "No recipes shared yet. They are read when this character opens the profession window." } })
+				end
 			end
 			table.sort(rows, function(a, b)
-				if a.prof ~= b.prof then return a.prof < b.prof end
 				if a.rank ~= b.rank then return a.rank > b.rank end
 				return a.whisper < b.whisper
 			end)
-			local people = 0
-			for _ in pairs(crafters) do people = people + 1 end
-			list.heads[1]:SetText("Profession")
-			list.heads[2]:SetText("Character")
-			list.heads[3]:SetText("Skill")
-			list.heads[4]:SetText("Recipes shared")
+			Heads("Character", "Skill", "", "Recipes shared")
+			hint:SetText(chosen and "Click a crafter to see their recipes." or "")
 			empty:SetText("No professions known yet. They arrive as guildmates log in with the addon.")
-			footer:SetText(("%d recipes from %d characters. Open your profession windows once to share yours."):format(recipes, people))
+			footer:SetText(chosen and ("%s: %d crafter%s, %d recipes shared. Open your profession windows once to share yours."):format(
+				chosen, #rows, #rows == 1 and "" or "s", recipes) or "")
 		end
 		list:SetRows(rows)
 		empty:SetShown(#rows == 0)
