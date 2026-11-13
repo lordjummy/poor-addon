@@ -572,9 +572,32 @@ local function BuildPoorest(panel)
 	week:SetWidth(300)
 
 	local share = Check(panel, "Share my gold", function(on)
-		P.db.opts.share = on
+		P.db.opts.share, P.db.opts.shareAsked = on, true
 		if on then P.SendGoldSoon() end
+		panel:Refresh()
 	end)
+	share:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("Join the leaderboard")
+		GameTooltip:AddLine("Off by default. When on, the gold of your characters is sent to guildmates who use the addon. "
+			.. "When off, nobody sees it; your own row here is visible only to you.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	share:SetScript("OnLeave", GameTooltip_Hide)
+	StaticPopupDialogs["POOR_SHARE"] = {
+		text = "The Poorest tab ranks the guild by how little gold everyone has.\n\nShare your gold with guildmates who use the addon and join the board?\n\nYou can change this any time with the \"Share my gold\" box.",
+		button1 = YES,
+		button2 = NO,
+		OnAccept = function()
+			P.db.opts.share = true
+			P.SendGoldSoon()
+			P.Fire("Options")
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
 	share:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -120, -66)
 
 	local combine = Check(panel, "Combine alts", function(on)
@@ -584,6 +607,11 @@ local function BuildPoorest(panel)
 	combine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -250, -66)
 
 	function panel:Refresh()
+		-- Asked once, the first time the tab is looked at.
+		if not P.db.opts.shareAsked then
+			P.db.opts.shareAsked = true
+			StaticPopup_Show("POOR_SHARE")
+		end
 		share:SetChecked(P.db.opts.share)
 		combine:SetChecked(P.db.opts.combineAlts)
 		local rows, sum = P.Leaderboard(), 0
@@ -599,8 +627,9 @@ local function BuildPoorest(panel)
 		if #rows == 0 then
 			total:SetText("No gold reports yet.")
 		else
-			total:SetText(("Guild net worth: %s across %d %s (average %s)"):format(
-				P.MoneyIcons(sum), #rows, P.db.opts.combineAlts and "players" or "characters", P.MoneyIcons(sum / #rows)))
+			total:SetText(("Guild net worth: %s across %d %s (average %s)%s"):format(
+				P.MoneyIcons(sum), #rows, P.db.opts.combineAlts and "players" or "characters", P.MoneyIcons(sum / #rows),
+				P.db.opts.share and "" or "   |cffff8040You are not sharing: only you see your row.|r"))
 		end
 	end
 end

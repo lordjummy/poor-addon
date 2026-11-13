@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2
+
+- Sharing your gold is now off by default. The Poorest tab asks once whether you want to join the leaderboard.
+
 ## 0.9.1
 
 - Adds the CurseForge project ID so apps recognise an installed copy.

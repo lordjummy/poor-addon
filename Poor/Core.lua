@@ -624,7 +624,9 @@ end
 ---------------------------------------------------------------------------
 local DEFAULT_OPTS = {
 	combineAlts = true, thankDonors = true,
-	showOffline = false, share = true, minimap = true, angle = 215, greet = true,
+	-- Gold is private until the player says otherwise: sharing starts off, and
+	-- the Poorest tab asks once (shareAsked) whether to join the leaderboard.
+	showOffline = false, share = false, shareAsked = false, minimap = true, angle = 215, greet = true,
 	alerts = true, alertPin = true, alertChat = true }
 
 local function Greet()
@@ -715,6 +717,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
+		-- Someone who already ran a version where sharing was on by default
+		-- keeps their setting and is not asked again.
+		if P.db.opts.share ~= nil and P.db.opts.shareAsked == nil then P.db.opts.shareAsked = true end
 		for k, v in pairs(DEFAULT_OPTS) do
 			if P.db.opts[k] == nil then P.db.opts[k] = v end
 		end
@@ -899,6 +904,7 @@ SlashCmdList.POOR = function(msg)
 		P.SayGuild(BROKE_LINES[math.random(#BROKE_LINES)]:format(P.MoneyText(GetMoney())))
 	elseif cmd == "share" then
 		P.db.opts.share = not P.db.opts.share
+		P.db.opts.shareAsked = true
 		P.Print("Sharing your gold with the guild: " .. (P.db.opts.share and "on" or "off"))
 		if P.db.opts.share then P.SendGoldSoon() end
 		P.Fire("Options")

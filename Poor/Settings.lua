@@ -15,8 +15,11 @@ local ROWS = {
 		changed = function() P.MinimapInit() end },
 	{ header = "Gold" },
 	{ key = "share", label = "Share my gold with the guild",
-		tip = "Report this character's gold to guildmates who run the addon, for the Poorest leaderboard. Off: you see others but nobody sees you.",
-		changed = function(value) if value and P.started then P.SendGoldSoon() end end },
+		tip = "Off by default. Report your characters' gold to guildmates who run the addon, for the Poorest leaderboard. Off: you see others but nobody sees you.",
+		changed = function(value)
+			P.db.opts.shareAsked = true
+			if value and P.started then P.SendGoldSoon() end
+		end },
 	{ key = "combineAlts", label = "Count alts with their main",
 		tip = "On the Poorest and Shame tabs, add each player's linked characters together. Link yours with /poor main <name>." },
 	{ key = "thankDonors", label = "Whisper a thank-you for donations",
