@@ -2,7 +2,7 @@
 ## Title: |cffb87333poor|r
 ## Notes: Guild addon for <poor>: roster, poorest-member leaderboard, events, funds, begging board, bank and crafter directory, PvP alerts. Type /poor
 ## Author: poor
-## Version: 0.11.0
+## Version: 0.11.1
 ## Category: Guild
 ## IconTexture: Interface\Icons\INV_Misc_Coin_05
 ## SavedVariables: PoorDB

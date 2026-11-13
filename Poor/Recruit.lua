@@ -19,8 +19,8 @@ function P.ClassLabel(token)
 end
 
 --- The guild by class: { class, total, active, online, capped }, thinnest
---- first by active members. A class the guild has none of is listed too,
---- unless this faction cannot have it.
+--- first by active members. A class the guild has none of is listed too.
+--- All nine are open to both factions on WoW Forever.
 function P.Composition()
 	local by, rows = {}, {}
 	for _, token in ipairs(P.CLASSES) do by[token] = { class = token, total = 0, active = 0, online = 0, capped = 0 } end
@@ -37,11 +37,7 @@ function P.Composition()
 			if m.level >= P.MAX_LEVEL then e.capped = e.capped + 1 end
 		end
 	end
-	local faction = UnitFactionGroup and UnitFactionGroup("player")
-	for token, e in pairs(by) do
-		local impossible = e.total == 0 and ((token == "PALADIN" and faction == "Horde") or (token == "SHAMAN" and faction == "Alliance"))
-		if not impossible then tinsert(rows, e) end
-	end
+	for _, e in pairs(by) do tinsert(rows, e) end
 	table.sort(rows, function(a, b)
 		if a.active ~= b.active then return a.active < b.active end
 		return a.class < b.class
