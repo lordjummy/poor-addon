@@ -378,7 +378,8 @@ local function BuildCrafters(panel)
 				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 				panel:Refresh()
 			elseif e.whisper and e.whisper ~= P.me then
-				Whisper(e.whisper)
+				-- A recipe row starts the request for the player; a crafter row just opens the whisper.
+				Whisper(e.whisper, e.ask)
 			end
 		end)
 		row:SetScript("OnEnter", function(self)
@@ -400,7 +401,8 @@ local function BuildCrafters(panel)
 			if e.open then
 				GameTooltip:AddLine("Click to see the recipes" .. ((e.whisper and e.whisper ~= P.me) and ", right-click to whisper" or ""), 0.6, 0.6, 0.6)
 			elseif e.whisper and e.whisper ~= P.me then
-				GameTooltip:AddLine((e.tip and "Click" or "Right-click") .. " to whisper " .. P.ShortName(e.whisper), 0.6, 0.6, 0.6)
+				GameTooltip:AddLine(e.ask and ("Click to ask " .. P.ShortName(e.whisper) .. " to craft it. Nothing is sent until you press Enter.")
+					or ("Click to whisper " .. P.ShortName(e.whisper)), 0.6, 0.6, 0.6, true)
 			end
 			GameTooltip:Show()
 		end)
@@ -472,7 +474,8 @@ local function BuildCrafters(panel)
 				local name = P.TokenName(token)
 				if not name then loading = loading + 1 end
 				tinsert(rows, { name or ("Recipe " .. token:sub(2)), "", "", "", token = token, sort = (name or "\255"):lower(),
-					online = Online(browse.char), whisper = browse.char })
+					online = Online(browse.char), whisper = browse.char,
+					ask = name and ("Hi! Could you craft " .. name .. " for me?") or nil })
 			end
 			table.sort(rows, function(a, b)
 				if a.sort ~= b.sort then return a.sort < b.sort end
@@ -492,6 +495,7 @@ local function BuildCrafters(panel)
 				end)
 				tinsert(rows, { r.name, r.prof, "", Names(r.crafters), sort = r.name:lower(),
 					online = Online(r.crafters[1]), whisper = r.crafters[1],
+					ask = "Hi! Could you craft " .. r.name .. " for me?",
 					tip = { r.name, r.prof, "Made by: " .. Names(r.crafters) } })
 			end
 			table.sort(rows, function(a, b) return a.sort < b.sort end)

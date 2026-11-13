@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.9
+
+- Crafters tab: clicking a recipe opens a whisper to the crafter with the request already typed.
+
 ## 0.9.8
 
 - The setup has a step for your professions: it shows which are shared and opens the ones not read yet with one button.

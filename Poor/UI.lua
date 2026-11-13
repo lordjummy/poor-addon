@@ -323,8 +323,15 @@ end
 ---------------------------------------------------------------------------
 -- Tab 1: Roster
 ---------------------------------------------------------------------------
-local function Whisper(name)
+--- Open the chat box on a whisper to `name`, with `text` already typed when
+--- given. Nothing is sent: the player reads it and presses Enter.
+local function Whisper(name, text)
 	name = P.WhisperTarget(name)
+	if text and text ~= "" then
+		local line = "/w " .. name .. " " .. text
+		if ChatFrameUtil and ChatFrameUtil.OpenChat then return ChatFrameUtil.OpenChat(line) end
+		if ChatFrame_OpenChat then return ChatFrame_OpenChat(line) end
+	end
 	if ChatFrameUtil and ChatFrameUtil.SendTell then
 		ChatFrameUtil.SendTell(name)
 	elseif ChatFrame_SendTell then
