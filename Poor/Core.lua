@@ -138,6 +138,9 @@ function P.RenameCharacter(old, new)
 	for _, a in ipairs(db.alertLog or {}) do
 		if a.from == old then a.from, touched = new, true end
 	end
+	for _, p in pairs(db.pledges or {}) do
+		if p.from == old then p.from, p.rev, touched = new, p.rev + 1, true end
+	end
 	return touched
 end
 
@@ -708,7 +711,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
@@ -727,6 +730,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.PruneHistory()
 		P.PruneFunds()
 		P.PruneBoard()
+		P.PrunePledges()
 		P.db.myChars[P.me] = true
 		P.CommInit()
 		P.MinimapInit()

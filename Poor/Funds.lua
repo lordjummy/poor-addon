@@ -481,12 +481,234 @@ StaticPopupDialogs["POOR_DONATION"] = {
 	preferredIndex = 3,
 }
 
+---------------------------------------------------------------------------
+-- Pledges: a donor's addon says what gold on its way is for, so the keeper's
+-- addon can record it without asking.
+--
+--   db.pledges[id] = { id, rev, fund, from, copper, created, state }
+--   state: "P" waiting for the gold, "D" received, "X" withdrawn
+-- Wire (compatible addition): C^id^rev^fund^from^copper^created^state
+---------------------------------------------------------------------------
+local PLEDGE_STATE = { P = true, D = true, X = true }
+
+local function PledgeLine(p)
+	return ("C^%s^%d^%s^%s^%d^%d^%s"):format(p.id, p.rev, p.fund, p.from, p.copper, p.created, p.state)
+end
+
+local function SetPledgeState(p, state)
+	p.state, p.rev = state, p.rev + 1
+	P.Send(PledgeLine(p))
+	P.Fire("Funds")
+end
+
+--- Pledges of a fund still waiting for their gold, oldest first; `from` narrows to one character.
+function P.PendingPledges(fundId, from)
+	local list = {}
+	for _, p in pairs(P.db.pledges) do
+		if p.state == "P" and p.fund == fundId and (not from or p.from == from) then tinsert(list, p) end
+	end
+	table.sort(list, function(a, b)
+		if a.created ~= b.created then return a.created < b.created end
+		return a.id < b.id
+	end)
+	return list
+end
+
+--- Promise gold to a fund or lottery. The gold itself still goes by trade or mail.
+function P.Pledge(fundId, copper)
+	local f = P.db.funds[fundId]
+	if not f or f.deleted or f.closed then return nil, "That one is closed." end
+	if f.collector == P.me then return nil, "You hold this one yourself. Add your own gold with the Donor and Gold boxes." end
+	if not copper or copper <= 0 then return nil, "Amount must be gold, like 5 or 2g 50s." end
+	local p = { id = NewId(), rev = 1, fund = fundId, from = P.me, copper = copper, created = P.Now(), state = "P" }
+	P.db.pledges[p.id] = p
+	P.Send(PledgeLine(p))
+	P.Fire("Funds")
+	return p
+end
+
+function P.CancelPledge(id)
+	local p = P.db.pledges[id]
+	if not p or p.from ~= P.me or p.state ~= "P" then return nil end
+	SetPledgeState(p, "X")
+	return p
+end
+
+function P.PrunePledges()
+	local now = P.Now()
+	for id, p in pairs(P.db.pledges) do
+		local age, f = now - p.created, P.db.funds[p.fund]
+		if not f or f.deleted or (p.state ~= "P" and age > 3 * DAY) or age > 14 * DAY then P.db.pledges[id] = nil end
+	end
+end
+
+P.handlers.C = function(_, id, rev, fund, from, copper, created, state)
+	rev, copper, created = tonumber(rev), tonumber(copper), tonumber(created)
+	if not id or id == "" or not rev or not copper or not created or not fund or not from or not PLEDGE_STATE[state or ""] then return end
+	P.Hear("C" .. id, rev)
+	local p = P.db.pledges[id]
+	if p and p.rev >= rev then return end
+	local isNew = not p
+	p = p or { id = id }
+	p.rev, p.fund, p.from, p.copper, p.created, p.state = rev, fund, from, copper, created, state
+	P.db.pledges[id] = p
+	P.Fire("Funds")
+	local f = P.db.funds[fund]
+	if isNew and state == "P" and f and f.collector == P.me and not P.Syncing() then
+		P.Print(("%s pledged %s to |cffffffff%s|r. It is recorded when the gold arrives."):format(P.ShortName(from), P.MoneyIcons(copper), f.title))
+	end
+end
+
+tinsert(P.syncers, function()
+	for id, p in pairs(P.db.pledges) do
+		P.Send(function()
+			-- A pledge to a fund that is gone is of no use to anyone.
+			local f = P.db.funds[p.fund]
+			if f and not f.deleted and P.db.pledges[id] == p and P.HeardVersion("C" .. id) < p.rev then return PledgeLine(p) end
+		end)
+	end
+end)
+
+--- Gold arrived from `name`: which of this character's open funds was it
+--- pledged to? Returns the fund and the pledges it settles, or nil when no
+--- pledge says, or when pledges to several funds leave it unclear.
+local function MatchPledge(name, copper)
+	local main, cands = P.MainOf(name), {}
+	for _, p in pairs(P.db.pledges) do
+		local f = P.db.funds[p.fund]
+		if p.state == "P" and f and not f.deleted and not f.closed and f.collector == P.me
+			and (p.from == name or P.MainOf(p.from) == main) then
+			tinsert(cands, p)
+		end
+	end
+	if #cands == 0 then return nil end
+	table.sort(cands, function(a, b) return a.created < b.created end)
+	-- One pledge of exactly this amount.
+	for _, p in ipairs(cands) do
+		if p.copper == copper then return P.db.funds[p.fund], { p } end
+	end
+	-- Several pledges to one fund paid together, or all pledges are to one
+	-- fund anyway (the amount then differs from the promise; the gold counts).
+	local perFund, funds = {}, 0
+	for _, p in ipairs(cands) do
+		if not perFund[p.fund] then
+			perFund[p.fund] = { sum = 0, list = {} }
+			funds = funds + 1
+		end
+		perFund[p.fund].sum = perFund[p.fund].sum + p.copper
+		tinsert(perFund[p.fund].list, p)
+	end
+	for fundId, group in pairs(perFund) do
+		if group.sum == copper or funds == 1 then return P.db.funds[fundId], group.list end
+	end
+	return nil
+end
+
+--- Whether gold from guildmates is counted for this fund without asking.
+function P.FundAuto(fundId)
+	return P.db.fundAuto[fundId] and true or false
+end
+
+function P.SetFundAuto(fundId, on)
+	P.db.fundAuto[fundId] = on and true or nil
+	P.Fire("Funds")
+end
+
 local function OnReceived(name, copper, how)
 	if not P.EnsureStarted() or not name or not copper or copper <= 0 then return end
+	-- 1. A pledge says what this gold is for.
+	local pledged, settled = MatchPledge(name, copper)
+	if pledged then
+		local ok, err = P.AddDonation(pledged.id, name, copper, how)
+		if ok then
+			for _, p in ipairs(settled) do SetPledgeState(p, "D") end
+			P.Print(("Recorded %s from %s for |cffffffff%s|r, as pledged."):format(P.MoneyIcons(copper), P.ShortName(name), pledged.title))
+		else
+			P.Print(err)
+		end
+		return
+	end
 	local f = MyOpenFund()
 	if not f then return end
+	-- 2. The keeper asked for gold from guildmates to be counted unasked.
+	--    A lottery only takes whole tickets that way.
+	if P.FundAuto(f.id) and P.members[name] and (not f.price or copper % f.price == 0) then
+		if P.AddDonation(f.id, name, copper, how) then
+			P.Print(("Counted %s from %s for |cffffffff%s|r automatically. Remove on the Funds tab undoes it."):format(
+				P.MoneyIcons(copper), P.ShortName(name), f.title))
+			return
+		end
+	end
+	-- 3. Otherwise, ask.
 	tinsert(waiting, { fund = f.id, name = name, copper = copper, how = how })
 	if not asking then AskNext() end
+end
+
+---------------------------------------------------------------------------
+-- The donor's side: fill in the gold of a pledge when the trade or the mail
+-- to the keeper is open, so paying is one click.
+---------------------------------------------------------------------------
+--- This character's pledges still waiting, with their funds: { { pledge, fund }, ... }
+local function MyWaiting()
+	local list = {}
+	for _, p in pairs(P.db.pledges) do
+		local f = P.db.funds[p.fund]
+		if p.state == "P" and p.from == P.me and f and not f.deleted and not f.closed then tinsert(list, { p, f }) end
+	end
+	table.sort(list, function(a, b) return a[1].created < b[1].created end)
+	return list
+end
+
+local function FillTrade(partner)
+	local sum, titles = 0, {}
+	for _, w in ipairs(MyWaiting()) do
+		if w[2].collector == partner then
+			sum = sum + w[1].copper
+			tinsert(titles, w[2].title)
+		end
+	end
+	if sum == 0 or sum > GetMoney() then return end
+	local ok = MoneyInputFrame_SetCopper and TradePlayerInputMoneyFrame
+		and pcall(MoneyInputFrame_SetCopper, TradePlayerInputMoneyFrame, sum)
+	P.Print(("You pledged %s for %s.%s"):format(P.MoneyIcons(sum), table.concat(titles, ", "),
+		ok and " The amount is filled in; check it and press Trade." or " Put that amount in the trade."))
+end
+
+local declinedMail = {}
+
+local function PrepareMail(p, f)
+	local ok = pcall(function()
+		if MailFrameTab_OnClick then MailFrameTab_OnClick(nil, 2) end
+		SendMailNameEditBox:SetText(P.FOREVER and P.ShortName(f.collector) or f.collector)
+		SendMailSubjectEditBox:SetText(f.title)
+		MoneyInputFrame_SetCopper(SendMailMoney, p.copper)
+	end)
+	P.Print(ok and ("Mail to %s prepared with %s. Check it and press Send."):format(P.ShortName(f.collector), P.MoneyIcons(p.copper))
+		or ("Could not prepare the mail. Send %s to %s yourself."):format(P.MoneyIcons(p.copper), P.ShortName(f.collector)))
+end
+
+StaticPopupDialogs["POOR_PLEDGE_MAIL"] = {
+	text = "%s",
+	button1 = YES,
+	button2 = NO,
+	OnAccept = function(_, data) PrepareMail(data[1], data[2]) end,
+	OnCancel = function(_, data) declinedMail[data[1].id] = true end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}
+
+local function OfferMail()
+	for _, w in ipairs(MyWaiting()) do
+		local p, f = w[1], w[2]
+		if not declinedMail[p.id] and p.copper <= GetMoney() then
+			local dialog = StaticPopup_Show("POOR_PLEDGE_MAIL", ("You pledged %s to \"%s\".\nPrepare the mail to %s now?"):format(
+				P.MoneyIcons(p.copper), f.title, P.ShortName(f.collector)))
+			if dialog then dialog.data = w end
+			return
+		end
+	end
 end
 
 -- Trade: remember who and how much while the window is open; the gold only
@@ -522,10 +744,14 @@ frame:RegisterEvent("TRADE_SHOW")
 frame:RegisterEvent("TRADE_MONEY_CHANGED")
 frame:RegisterEvent("TRADE_ACCEPT_UPDATE")
 frame:RegisterEvent("UI_INFO_MESSAGE")
+frame:RegisterEvent("MAIL_SHOW")
 frame:SetScript("OnEvent", function(_, event, _, message)
-	if event == "TRADE_SHOW" then
+	if event == "MAIL_SHOW" then
+		if P.started then OfferMail() end
+	elseif event == "TRADE_SHOW" then
 		tradeMoney = 0
 		tradePartner = P.UnitFullName("NPC")
+		if P.started and tradePartner then pcall(FillTrade, tradePartner) end
 	elseif event == "TRADE_MONEY_CHANGED" or event == "TRADE_ACCEPT_UPDATE" then
 		ReadTrade()
 	elseif event == "UI_INFO_MESSAGE" then

@@ -970,7 +970,85 @@ local function BuildFunds(panel)
 	bar:SetMinMaxValues(0, 1)
 	Fill(bar, "BACKGROUND", { 0, 0, 0, 0.5 })
 
-	-- Line 3: the keeper records a payment by hand
+	-- Line 3: pledging. A donor promises gold so it is recorded unasked when it
+	-- arrives; the keeper sees what is on its way and can let all gold from
+	-- guildmates count without the question.
+	StaticPopupDialogs["POOR_PLEDGE"] = {
+		text = "%s",
+		button1 = ACCEPT,
+		button2 = CANCEL,
+		hasEditBox = true,
+		maxLetters = 12,
+		OnAccept = function(self, fundId)
+			local box = self.EditBox or self.editBox
+			local text = strtrim(box and box:GetText() or "")
+			local f = P.db.funds[fundId or ""]
+			if not f then return end
+			local copper
+			if f.price then
+				local n = tonumber(text)
+				if not n or n < 1 or n ~= math.floor(n) then return P.Print("Type a number of tickets, like 3.") end
+				copper = n * f.price
+			else
+				copper = P.ParseMoney(text)
+			end
+			local p, err = P.Pledge(fundId, copper)
+			if not p then return P.Print(err) end
+			P.Print(("Pledged %s to |cffffffff%s|r. Now trade it to %s (the amount fills in), or open a mailbox and the addon offers to prepare the mail."):format(
+				P.MoneyIcons(copper), f.title, P.ShortName(f.collector)))
+		end,
+		EditBoxOnEnterPressed = function(self)
+			local parent = self:GetParent()
+			StaticPopupDialogs["POOR_PLEDGE"].OnAccept(parent, parent.data)
+			parent:Hide()
+		end,
+		EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+	local pledgeRow = CreateFrame("Frame", nil, detail)
+	pledgeRow:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -122)
+	pledgeRow:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -122)
+	pledgeRow:SetHeight(22)
+	local chip = Button(pledgeRow, "Chip in", 96, function()
+		local f = P.db.funds[current or ""]
+		if not f then return end
+		local dialog = StaticPopup_Show("POOR_PLEDGE", f.price
+			and ("How many tickets for \"%s\"?\n%s each."):format(f.title, P.MoneyIcons(f.price))
+			or ("How much gold will you give to \"%s\"?"):format(f.title))
+		if dialog then dialog.data = f.id end
+	end)
+	chip:SetPoint("LEFT", pledgeRow, "LEFT", 0, 0)
+	chip:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Promise gold")
+		GameTooltip:AddLine("Say how much you are sending. When you then trade or mail it, the amount is filled in for you, "
+			.. "and it is recorded as yours the moment it arrives.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	chip:SetScript("OnLeave", GameTooltip_Hide)
+	local cancelPledge = Button(pledgeRow, "Withdraw", 70, function()
+		local mine = P.PendingPledges(current, P.me)
+		if mine[1] then P.CancelPledge(mine[#mine].id) end
+	end)
+	cancelPledge:SetPoint("RIGHT", pledgeRow, "RIGHT", 0, 0)
+	local auto = Check(pledgeRow, "Count guildmates' gold without asking", function(on) P.SetFundAuto(current, on) end)
+	auto:SetPoint("LEFT", pledgeRow, "LEFT", 0, 0)
+	auto:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Skip the question")
+		GameTooltip:AddLine("While this is the fund you are looking at, gold a guildmate trades or mails you is recorded for it straight away. "
+			.. "For a lottery only whole tickets count that way. Pledged gold is always recorded without asking. "
+			.. "Remove undoes a wrong entry.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	auto:SetScript("OnLeave", GameTooltip_Hide)
+	local pledgeText = Label(pledgeRow)
+	pledgeText:SetTextColor(DIM[1], DIM[2], DIM[3])
+
+	-- Line 4: the keeper records a payment by hand
 	local manage = CreateFrame("Frame", nil, detail)
 	manage:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -122)
 	manage:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, -122)
@@ -1017,7 +1095,7 @@ local function BuildFunds(panel)
 			selectedEntry = self.data.eid ~= selectedEntry and self.data.eid or nil
 			panel:Refresh()
 		end)
-	end, -168, 62)
+	end, -192, 62)
 
 	local listEmpty = Label(detail, nil, "GameFontDisable")
 	listEmpty:SetPoint("CENTER", detail, "CENTER", -10, -50)
@@ -1102,6 +1180,38 @@ local function BuildFunds(panel)
 
 		local manages = P.CanManageFund(f)
 		manage:SetShown(manages)
+
+		-- Pledge line: shown while gold can still come in.
+		local keeper = f.collector == P.me
+		pledgeRow:SetShown(not f.closed)
+		manage:ClearAllPoints()
+		manage:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, f.closed and -122 or -146)
+		manage:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -28, f.closed and -122 or -146)
+		chip:SetShown(not keeper)
+		chip:SetText(f.price and "Buy tickets" or "Chip in")
+		auto:SetShown(keeper)
+		auto:SetChecked(P.FundAuto(f.id))
+		pledgeText:ClearAllPoints()
+		if keeper then
+			local parts = {}
+			for i, p in ipairs(P.PendingPledges(f.id)) do
+				if i > 4 then parts[5] = "..." break end
+				parts[i] = P.ShortName(p.from) .. " " .. P.MoneyIcons(p.copper)
+			end
+			cancelPledge:Hide()
+			pledgeText:SetPoint("RIGHT", pledgeRow, "RIGHT", 0, 0)
+			pledgeText:SetWidth(210)
+			pledgeText:SetJustifyH("RIGHT")
+			pledgeText:SetText(#parts > 0 and ("On its way: " .. table.concat(parts, ", ")) or "")
+		else
+			local mine, sum = P.PendingPledges(f.id, P.me), 0
+			for _, p in ipairs(mine) do sum = sum + p.copper end
+			cancelPledge:SetShown(#mine > 0)
+			pledgeText:SetPoint("LEFT", chip, "RIGHT", 10, 0)
+			pledgeText:SetWidth(270)
+			pledgeText:SetJustifyH("LEFT")
+			pledgeText:SetText(#mine > 0 and ("You pledged %s. Trade or mail it to %s."):format(P.MoneyIcons(sum), P.ShortName(f.collector)) or "")
+		end
 		announce:SetShown(manages)
 		delete:SetShown(manages)
 
