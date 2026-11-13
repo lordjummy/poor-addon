@@ -1,0 +1,17 @@
+# Pushing a tag like v0.9.2 builds the addon zip and uploads it to CurseForge.
+# Needs the repository secret CF_API_KEY (a CurseForge API token).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and upload to CurseForge
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: bash tools/release.sh "$GITHUB_REF_NAME"
