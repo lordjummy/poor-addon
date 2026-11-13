@@ -1420,6 +1420,12 @@ local function BuildWindow()
 	title:SetPoint("LEFT", icon, "RIGHT", 8, 0)
 	local version = Label(f, "v" .. P.VERSION, "GameFontDisable")
 	version:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 8, 1)
+	local function ShowVersion()
+		local latest = P.UpdateAvailable()
+		version:SetText(latest and ("v%s   |cffffd100update available: %s|r"):format(P.VERSION, latest) or ("v" .. P.VERSION))
+	end
+	ShowVersion()
+	P.On("Version", ShowVersion)
 
 	local close = Button(f, "X", 24, function() f:Hide() end)
 	close:SetPoint("RIGHT", header, "RIGHT", -6, 0)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.6
+
+- Tells you when a newer version is out: a chat line at login and a note in the window's title bar. The news is passed along between members, so it reaches you even if nobody on the new version is online.
+
 ## 0.9.5
 
 - Crafters tab: professions are listed on the left; pick one to see its crafters, best skill first.

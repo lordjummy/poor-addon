@@ -699,6 +699,11 @@ local DEFAULT_OPTS = {
 	alerts = true, alertPin = true, alertChat = true }
 
 local function Greet()
+	-- An update is worth saying even with the greeting turned off.
+	if P.UpdateAvailable() and not P.toldOutdated then
+		P.toldOutdated = true
+		P.Print(P.UpdateNotice())
+	end
 	if not P.db.opts.greet then return end
 	local rank, total = P.MyRank()
 	local line = ("Welcome back, %s. You are holding %s."):format(P.ShortName(P.me), P.MoneyIcons(GetMoney()))

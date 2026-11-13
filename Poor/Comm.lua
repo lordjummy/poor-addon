@@ -226,17 +226,63 @@ function handlers.H()
 	ScheduleSync(3 + math.random() * 6)
 end
 
+-- Update notices. They travel on their own prefix, shared by every version
+-- of the addon, so that copies too old to sync still hear them. A message is
+-- "<own version>" or "<own version> <newest version heard of>": every copy
+-- passes on the newest version it knows, so the news spreads even when
+-- nobody running that version is online.
 local function VersionNumber(v)
 	local a, b, c = tostring(v):match("^(%d+)%.(%d+)%.?(%d*)")
 	return a and (tonumber(a) * 1000000 + tonumber(b) * 1000 + (tonumber(c) or 0))
 end
 
-local function OnVersion(sender, version)
-	local theirs, mine = VersionNumber(version), VersionNumber(P.VERSION)
-	if theirs and mine and theirs > mine and not P.toldOutdated then
-		P.toldOutdated = true
-		P.Print(("%s has a newer version of the addon (%s, you have %s). Ask them for it."):format(
-			P.ShortName(sender), version:sub(1, 12), P.VERSION))
+--- The newer version this copy has heard of, or nil when it is up to date.
+function P.UpdateAvailable()
+	local latest, mine = VersionNumber(P.db.latestVersion or ""), VersionNumber(P.VERSION)
+	if latest and mine and latest > mine then return P.db.latestVersion end
+	return nil
+end
+
+function P.UpdateNotice()
+	local latest = P.UpdateAvailable()
+	return latest and ("|cffffd100Update available:|r poor %s (you have %s). Update with WowUp or the CurseForge app, then restart the game."):format(latest, P.VERSION)
+end
+
+local function SendVersion()
+	local latest = P.UpdateAvailable()
+	pcall(C_ChatInfo.SendAddonMessage, VERSION_PREFIX, P.VERSION .. (latest and (" " .. latest) or ""), "GUILD")
+end
+
+local replyPending = false
+
+local function OnVersion(_, message)
+	-- Their own version first, then the newest they have heard of.
+	local theirs, best, bestText
+	for text in tostring(message):gmatch("%S+") do
+		local n = VersionNumber(text)
+		if n then
+			theirs = theirs or n
+			if not best or n > best then best, bestText = n, text:sub(1, 12) end
+		end
+	end
+	if not best then return end
+	P.Hear("V", best)
+	local known = VersionNumber(P.UpdateAvailable() or P.VERSION)
+	if known and best > known then
+		P.db.latestVersion = bestText
+		P.Fire("Version")
+		if not P.toldOutdated then
+			P.toldOutdated = true
+			P.Print(P.UpdateNotice())
+		end
+	elseif known and theirs < known and not replyPending then
+		-- They are behind what this copy knows. Tell them, unless someone else does first.
+		replyPending = true
+		C_Timer.After(2 + math.random() * 6, function()
+			replyPending = false
+			local now = VersionNumber(P.UpdateAvailable() or P.VERSION)
+			if now and P.HeardVersion("V") < now then SendVersion() end
+		end)
 	end
 end
 
@@ -318,7 +364,9 @@ end
 function P.CommStart()
 	C_Timer.NewTicker(1, Pump)
 	Send("H^")
-	pcall(C_ChatInfo.SendAddonMessage, VERSION_PREFIX, P.VERSION, "GUILD")
+	-- An update that has since been installed is no longer news.
+	if not P.UpdateAvailable() then P.db.latestVersion = nil end
+	SendVersion()
 	P.SendGoldSoon(1)
 	ReportAll(1, 2)
 	-- Listen to what the others answer first, then fill in what they lacked.
