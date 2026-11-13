@@ -16,15 +16,24 @@ local _, P = ...
 local TTL = 30 * 60
 P.GROUP_TEXT_MAX = 40
 
--- Dungeons with the levels they suit, for the picker and for "who could come".
+-- WoW Forever's dungeons with the levels they suit, lowest first, for the
+-- picker and for "who could come". Forever adds several to the classic set
+-- (Hall of Thanes, Ruins of Lordaeron, Excavation Site, City of Dalaran, The
+-- Drowned City, Krol'dok Stronghold, Shaper's Terrace) and splits others into
+-- wings. Names and ranges are as the Forever dungeon journal addon lists them.
 P.DUNGEONS = {
-	{ "Ragefire Chasm", 13, 18 }, { "Wailing Caverns", 17, 24 }, { "The Deadmines", 17, 26 },
-	{ "Shadowfang Keep", 22, 30 }, { "Blackfathom Deeps", 24, 32 }, { "The Stockade", 24, 32 },
-	{ "Gnomeregan", 29, 38 }, { "Razorfen Kraul", 29, 38 }, { "Scarlet Monastery", 28, 44 },
-	{ "Razorfen Downs", 37, 46 }, { "Uldaman", 41, 51 }, { "Zul'Farrak", 44, 54 },
-	{ "Maraudon", 46, 55 }, { "Sunken Temple", 50, 56 }, { "Blackrock Depths", 52, 60 },
-	{ "Lower Blackrock Spire", 55, 60 }, { "Dire Maul", 55, 60 }, { "Stratholme", 58, 60 },
-	{ "Scholomance", 58, 60 }, { "Upper Blackrock Spire", 58, 60 },
+	{ "Ragefire Chasm", 13, 18 }, { "Hall of Thanes", 13, 20 }, { "Ruins of Lordaeron", 15, 22 },
+	{ "Wailing Caverns", 15, 24 }, { "The Deadmines", 17, 26 }, { "Shadowfang Keep", 20, 30 },
+	{ "Blackfathom Deeps", 24, 32 }, { "The Stockade", 24, 32 }, { "Excavation Site: Wetlands", 26, 33 },
+	{ "City of Dalaran", 28, 33 }, { "Gnomeregan", 29, 38 }, { "Razorfen Kraul", 29, 38 },
+	{ "Scarlet Monastery: Graveyard", 30, 38 }, { "Scarlet Monastery: Library", 33, 41 },
+	{ "Scarlet Monastery: Armory", 34, 42 }, { "The Drowned City", 35, 40 },
+	{ "Scarlet Monastery: Cathedral", 36, 45 }, { "Razorfen Downs", 37, 46 }, { "Uldaman", 38, 48 },
+	{ "Krol'dok Stronghold", 40, 45 }, { "Zul'Farrak", 43, 50 }, { "Maraudon", 45, 52 },
+	{ "Sunken Temple", 49, 56 }, { "Blackrock Depths", 52, 60 }, { "Dire Maul: East", 55, 60 },
+	{ "Lower Blackrock Spire", 55, 60 }, { "Upper Blackrock Spire", 55, 60 }, { "Dire Maul: West", 57, 60 },
+	{ "Dire Maul: North", 57, 60 }, { "Scholomance", 58, 60 }, { "Shaper's Terrace", 58, 60 },
+	{ "Stratholme: Living", 58, 60 }, { "Stratholme: Undead", 58, 60 },
 }
 
 local function Line(g)

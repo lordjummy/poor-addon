@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.0
+
+- Shared quests, on the Groups tab: your quests that a guildmate has too, group quests first, with one click to ask them along.
+- The dungeon list is WoW Forever's own: 33 dungeons with their level ranges, including the new ones and the split wings.
+
 ## 0.14.3
 
 - The update notice now says to /reload after updating; a restart is not needed.

@@ -9,7 +9,8 @@
 --   db.blobs[key] = { ts = n, tokens = { ... } }     an empty list is a tombstone
 --   key: "K:Name" (bank contents), "R:Name:Profession" (a character's recipes),
 --        "C:Profession" (every recipe of a profession, see Crafts.lua),
---        or "A:Name" (players a recruiter approached, see Recruit.lua)
+--        "A:Name" (players a recruiter approached, see Recruit.lua),
+--        or "Q:Name" (the quests in a character's log, see Quests.lua)
 local _, P = ...
 
 local MAX_LEN = 240
@@ -20,7 +21,7 @@ end
 
 --- The character a blob belongs to. Catalogues ("C:") belong to nobody.
 function P.BlobOwner(key)
-	return key:match("^[KRA]:([^:]+)")
+	return key:match("^[KRAQ]:([^:]+)")
 end
 
 local function Lines(key, blob)

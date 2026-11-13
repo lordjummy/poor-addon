@@ -64,7 +64,7 @@ local STEPS = {
 				if on and P.started then P.Report("shame") end
 			end)
 			Text(page, "Shared with guildmates who use the addon without asking, because the features need it: your professions and "
-				.. "recipes, your level and progress to the next, and which characters are your alts.", -96, "GameFontDisable")
+				.. "recipes, your level and progress to the next, the quests in your log, and which characters are your alts.", -96, "GameFontDisable")
 			Text(page, "Nothing leaves the guild, and members without the addon see none of it.", -150, "GameFontDisable")
 		end,
 		leave = function()

@@ -698,6 +698,8 @@ local function BuildGroups(panel)
 	local pick = Button(panel, "Dungeons", 76, function(self)
 		if MenuUtil and MenuUtil.CreateContextMenu then
 			MenuUtil.CreateContextMenu(self, function(_, root)
+				-- 33 dungeons: let the menu scroll rather than run off the screen.
+				if root.SetScrollMode then root:SetScrollMode(420) end
 				root:CreateTitle("Dungeon")
 				for _, d in ipairs(P.DUNGEONS) do
 					root:CreateButton(("%s  |cff999999%d-%d|r"):format(d[1], d[2], d[3]), function() Pick(d) end)
@@ -1123,6 +1125,97 @@ local function BuildRecruit(panel)
 end
 
 ---------------------------------------------------------------------------
+-- Shared quests: the player's quests that a guildmate has too
+---------------------------------------------------------------------------
+local function BuildQuests(panel)
+	local function Online(name)
+		local m = P.members[name]
+		return m ~= nil and m.online
+	end
+	local function First(row) -- the first holder who is online, else nil
+		for _, name in ipairs(row.holders) do
+			if Online(name) then return name end
+		end
+	end
+
+	local list = List(panel, {
+		{ "Quest", 250 }, { "Lvl", 36, "RIGHT" }, { "", 8 }, { "Also has it", 320 },
+	}, function(row, q)
+		local c = row.cells
+		local parts = {}
+		for i, name in ipairs(q.holders) do
+			parts[i] = Online(name) and ClassName(name) or ("|cff808080" .. P.ShortName(name) .. "|r")
+		end
+		c[1]:SetText(q.title .. (q.group and "  |cffffd100group|r" or ""))
+		c[2]:SetText(q.level > 0 and q.level or "")
+		c[4]:SetText(table.concat(parts, ", "))
+		row:SetAlpha(q.online > 0 and 1 or 0.6)
+	end, function(row)
+		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		row:SetScript("OnClick", function(self, button)
+			local who = First(self.data)
+			if not who then return end
+			if button == "RightButton" then
+				P.Invite(who)
+			else
+				Whisper(who, ("Hi! I am on %s too. Want to do it together?"):format(self.data.title))
+			end
+		end)
+		row:SetScript("OnEnter", function(self)
+			local q = self.data
+			local who = First(q)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(q.title)
+			if q.group then GameTooltip:AddLine("The game suggests a group for this one.", 1, 0.82, 0) end
+			for _, name in ipairs(q.holders) do
+				GameTooltip:AddLine(ClassName(name) .. (Online(name) and "" or "  |cff808080offline|r"), 1, 1, 1)
+			end
+			GameTooltip:AddLine(who and ("Click to ask " .. P.ShortName(who) .. ", right-click to invite. Nothing is sent until you press Enter.")
+				or "Nobody who has it is online right now.", 0.6, 0.6, 0.6, true)
+			GameTooltip:Show()
+		end)
+	end)
+
+	local hint = Label(panel, "Quests in your log that a guildmate has too. Group quests come first.")
+	hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -66)
+	hint:SetTextColor(0.6, 0.6, 0.6)
+	local share = Check(panel, "Share my quest log", -150, function(on)
+		P.db.opts.shareQuests = on
+		P.RefreshQuests(1)
+	end)
+	share:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("Let guildmates match their quests with yours")
+		GameTooltip:AddLine("Only the quests' ids are sent, to guildmates who use the addon. Off: they do not see yours, "
+			.. "but you still see who shares a quest with you.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	share:SetScript("OnLeave", GameTooltip_Hide)
+	local empty = Label(panel, nil, "GameFontDisable")
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
+	empty:SetWidth(480)
+	empty:SetWordWrap(true)
+	empty:SetJustifyH("CENTER")
+	local footer = Label(panel, nil, "GameFontNormalSmall")
+	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+
+	function panel:Refresh()
+		share:SetChecked(P.db.opts.shareQuests)
+		local rows = P.SharedQuests()
+		list:SetRows(rows)
+		local mine, sharers = 0, 0
+		for _ in pairs(P.myQuests) do mine = mine + 1 end
+		for key, blob in pairs(P.db.blobs) do
+			if key:sub(1, 2) == "Q:" and key ~= "Q:" .. P.me and #blob.tokens > 0 then sharers = sharers + 1 end
+		end
+		empty:SetText(sharers == 0 and "No guildmate has shared a quest log yet. It fills in as members with the addon come online."
+			or "None of your quests is in a guildmate's log right now.")
+		empty:SetShown(#rows == 0)
+		footer:SetText(("%d quests in your log, compared with %d guildmate%s."):format(mine, sharers, sharers == 1 and "" or "s"))
+	end
+end
+
+---------------------------------------------------------------------------
 -- Several panels under one tab, with a row of buttons to switch between
 -- them. parts = { { "Label", builder, visible = function() ... end }, ... }
 ---------------------------------------------------------------------------
@@ -1237,7 +1330,7 @@ local function BuildHome(panel)
 				if i > 3 then break end
 				parts[i] = ("%s wants %s%s"):format(ClassName(g.author), g.activity, g.need ~= "" and (" (needs " .. P.RoleNames(g.need) .. ")") or "")
 			end
-			add("Groups", table.concat(parts, "   "), "Groups")
+			add("Groups", table.concat(parts, "   "), "Groups", "Looking for group")
 		else
 			local near, parts = P.CouldCome(level - 3, level + 3), {}
 			for i, m in ipairs(near) do
@@ -1246,6 +1339,21 @@ local function BuildHome(panel)
 			end
 			add("Groups", #near > 0 and ("Nobody is looking for a group. Online near your level: %s%s"):format(table.concat(parts, ", "), #near > 5 and " and more" or "")
 				or "Nobody is looking for a group, and nobody near your level is online. Post a listing anyway.", "Groups")
+		end
+
+		-- Quests the player shares with someone who is online.
+		local shared, names = {}, {}
+		for _, q in ipairs(P.SharedQuests()) do
+			if q.online > 0 and #shared < 3 then
+				tinsert(shared, q.title .. (q.group and " |cffffd100(group)|r" or ""))
+				names[P.ShortName(q.holders[1]):match("^%S+")] = true
+			end
+		end
+		if #shared > 0 then
+			local who = {}
+			for name in pairs(names) do tinsert(who, name) end
+			table.sort(who)
+			add("Quests", ("On the same quest as %s: %s"):format(table.concat(who, ", "), table.concat(shared, ", ")), "Groups", "Shared quests")
 		end
 
 		-- Events: the next one, and whether the player answered.
@@ -1319,7 +1427,10 @@ local B = P.builders
 P.tabs = {
 	{ "Home", BuildHome },
 	{ "Roster", B.Roster },
-	{ "Groups", BuildGroups },
+	{ "Groups", Combined({
+		{ "Looking for group", BuildGroups, width = 130 },
+		{ "Shared quests", BuildQuests, width = 110 },
+	}) },
 	{ "Events", B.Events },
 	{ "Gold", Combined({
 		{ "Funds and lotteries", B.Funds, width = 140 },

@@ -729,7 +729,8 @@ local DEFAULT_OPTS = {
 	alerts = true, alertZoneOnly = true, alertPin = true, alertChat = true, groupNotify = true,
 	-- Deaths and repair bills are private until opted in. Group posts also go
 	-- to guild chat, so members without the addon see them. Board posts print.
-	shareShame = false, groupChat = true, boardNotify = true }
+	shareShame = false, groupChat = true, boardNotify = true,
+	shareQuests = true } -- the quest log, so guildmates on the same quests find each other
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.
