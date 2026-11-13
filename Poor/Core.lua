@@ -1011,6 +1011,17 @@ SlashCmdList.POOR = function(msg)
 		for i, c in ipairs(P.Contenders(3)) do
 			P.Print(("Chasing #%d: %s, level %d%s"):format(i, P.ClassColored(P.ShortName(c.name), c.class), c.level, c.pct and (" (" .. c.pct .. "%)") or ""))
 		end
+	elseif cmd == "testnotice" then
+		-- Shows what an update notice looks like, on this screen only.
+		if P.pretendUpdate then
+			P.pretendUpdate = nil
+			P.Print("Pretend update notice removed.")
+		else
+			P.pretendUpdate = "99.0.0"
+			P.Print(P.UpdateNotice())
+			P.Print("That was a test: nothing was sent to the guild. /poor testnotice again, or /reload, removes it.")
+		end
+		P.Fire("Version")
 	elseif cmd == "debug" then
 		P.ShowDebug()
 	elseif cmd == "status" then
@@ -1052,6 +1063,7 @@ SlashCmdList.POOR = function(msg)
 		print("  /poor share - toggle sharing your gold with the guild")
 		print("  /poor status - whether the addon is running, and the guild name it sees")
 		print("  /poor debug - a troubleshooting report in a window you can copy from")
+		print("  /poor testnotice - show what an update notice looks like (on your screen only)")
 		print("  /poor minimap - toggle the minimap button")
 		print("  /poor greet - toggle the login greeting")
 	end

@@ -1482,7 +1482,7 @@ local function BuildWindow()
 	local version = Label(f, "v" .. P.VERSION, "GameFontDisable")
 	version:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 8, 1)
 	local function ShowVersion()
-		local latest = P.UpdateAvailable()
+		local latest = P.ShownUpdate()
 		version:SetText(latest and ("v%s   |cffffd100update available: %s|r"):format(P.VERSION, latest) or ("v" .. P.VERSION))
 	end
 	ShowVersion()

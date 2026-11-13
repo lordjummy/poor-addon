@@ -248,8 +248,15 @@ function P.UpdateAvailable()
 	return nil
 end
 
+--- What the window shows as the available update. Normally the real one;
+--- /poor testnotice puts a pretend version here for this session only. It
+--- is never stored or sent, so it cannot spread to other members.
+function P.ShownUpdate()
+	return P.pretendUpdate or P.UpdateAvailable()
+end
+
 function P.UpdateNotice()
-	local latest = P.UpdateAvailable()
+	local latest = P.ShownUpdate()
 	return latest and ("|cffffd100Update available:|r poor %s (you have %s). Update with WowUp or the CurseForge app, then restart the game."):format(latest, P.VERSION)
 end
 
