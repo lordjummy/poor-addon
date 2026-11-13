@@ -110,7 +110,7 @@ local STEPS = {
 		title = "All set",
 		build = function(page)
 			Text(page, "That is everything. A few things worth knowing:", 0)
-			Text(page, "- Open your profession windows once so the guild can see what you can craft.\n"
+			Text(page, "- Your recipes are shared automatically. If a profession shows none, open its window once.\n"
 				.. "- Events, funds and lotteries appear on their tabs as officers create them.\n"
 				.. "- Only guildmates who have the addon see what you share.", -28)
 			Text(page, "Run this again with |cffffffff/poor setup|r.", -112, "GameFontDisable")

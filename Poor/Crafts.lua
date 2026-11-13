@@ -189,7 +189,14 @@ function P.DebugSkills(out)
 		if owner == P.me then tinsert(recipes, prof .. " " .. #blob.tokens) end
 	end
 	out("Recipes read from profession windows: " .. (#recipes > 0 and table.concat(recipes, ", ") or "none"))
-	out("Profession window reads this session, newest first:")
+	local catalogues = {}
+	for key, blob in pairs(P.db.blobs) do
+		local prof = key:match("^C:(.+)$")
+		if prof then tinsert(catalogues, prof .. " " .. #blob.tokens) end
+	end
+	out("Recipe catalogues known: " .. (#catalogues > 0 and table.concat(catalogues, ", ") or "none"))
+	out("Can ask the game whether a recipe is known: " .. ((C_SpellBook and C_SpellBook.IsSpellKnown) and "C_SpellBook.IsSpellKnown" or (IsPlayerSpell and "IsPlayerSpell" or "no")))
+	out("Profession reads this session, newest first:")
 	if #P.windowLog == 0 then out("  none") end
 	for _, line in ipairs(P.windowLog) do out("  " .. line) end
 end
@@ -234,12 +241,8 @@ local function Token(link)
 	return spell and ("s" .. spell) or nil
 end
 
---- Add what the open window lists to this character's recipes of `prof`.
---- A filtered or collapsed window lists only part, so known recipes are kept.
-local function Merge(prof, found)
-	if not P.started or not P.Readable(prof) or not prof or prof == "" or prof == "UNKNOWN" then return end
-	prof = prof:gsub("[:,%^=]", "")
-	local key = "R:" .. P.me .. ":" .. prof
+--- Add tokens to a shared list, never removing any. True if it grew.
+local function Grow(key, found)
 	local have, old = {}, P.GetBlob(key)
 	for _, token in ipairs(old and old.tokens or {}) do have[token] = true end
 	local grew = false
@@ -249,11 +252,44 @@ local function Merge(prof, found)
 			grew = true
 		end
 	end
-	if not grew then return end
+	if not grew then return false end
 	local tokens = {}
 	for token in pairs(have) do tinsert(tokens, token) end
 	table.sort(tokens)
 	P.SetBlob(key, tokens)
+	return true
+end
+
+local function CleanProf(prof)
+	if not P.started or not P.Readable(prof) or type(prof) ~= "string" or prof == "" or prof == "UNKNOWN" then return nil end
+	return (prof:gsub("[:,%^=]", ""))
+end
+
+--- Add recipes to this character's own list for `prof`. A filtered or
+--- collapsed window lists only part, so known recipes are kept.
+local function Merge(prof, found)
+	prof = CleanProf(prof)
+	return prof and Grow("R:" .. P.me .. ":" .. prof, found) or false
+end
+
+-- THE CATALOGUE. An open profession window lists every recipe of that
+-- profession, learned or not. That full list is shared with the guild as
+-- "C:<Profession>". With it, any member's addon can ask the game "do I know
+-- this recipe?" for each entry, with no window open. So one member opening
+-- a profession once is enough for every member with that profession.
+local function MergeCatalogue(prof, all)
+	prof = CleanProf(prof)
+	return prof and Grow("C:" .. prof, all) or false
+end
+
+local function Known(spellID)
+	if C_SpellBook and C_SpellBook.IsSpellKnown then
+		local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+		local ok, known = pcall(C_SpellBook.IsSpellKnown, spellID, bank)
+		if ok then return P.Readable(known) and known and true or false end
+	end
+	if IsPlayerSpell then return IsPlayerSpell(spellID) and true or false end
+	return false
 end
 
 -- What the last few looks at a profession window found, for /poor debug.
@@ -294,18 +330,43 @@ local function ScanProfessionsFrame()
 		-- Also what an event after the window closed looks like.
 		return Log(("no profession name (id %s, parent %s)"):format(tostring(info.professionID), tostring(info.parentProfessionID)))
 	end
-	local found, total, learned = {}, 0, 0
+	local found, all, total, learned = {}, {}, 0, 0
 	for _, id in ipairs(T.GetAllRecipeIDs() or {}) do
 		total = total + 1
+		all["s" .. id] = true
 		local recipe = T.GetRecipeInfo(id)
 		if type(recipe) == "table" and recipe.learned then
 			found["s" .. id] = true
 			learned = learned + 1
 		end
 	end
+	MergeCatalogue(prof, all)
 	Log(("%s: %d recipes listed, %d learned"):format(prof, total, learned))
 	NoteFromWindow(prof, info.skillLevel, info.maxSkillLevel)
 	Merge(prof, found)
+end
+
+--- Without any window: check the catalogue of each of this character's
+--- professions against what the game says it knows.
+local function AutoRead()
+	if not P.started then return end
+	local mine = P.db.profs[P.me]
+	for _, skill in ipairs(mine and mine.list or {}) do
+		local catalogue = P.GetBlob("C:" .. skill.name)
+		if catalogue and #catalogue.tokens > 0 then
+			local found, n = {}, 0
+			for _, token in ipairs(catalogue.tokens) do
+				local id = token:sub(1, 1) == "s" and tonumber(token:sub(2))
+				if id and Known(id) then
+					found[token] = true
+					n = n + 1
+				end
+			end
+			if n > 0 and Merge(skill.name, found) then
+				Log(("automatic: %s, %d of %d catalogued recipes known"):format(skill.name, n, #catalogue.tokens))
+			end
+		end
+	end
 end
 
 local function ScanTradeSkill()
@@ -421,7 +482,7 @@ end
 
 local frame = CreateFrame("Frame")
 for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED",
-	"NEW_RECIPE_LEARNED", "CRAFT_SHOW", "CRAFT_UPDATE", "SKILL_LINES_CHANGED", "GET_ITEM_INFO_RECEIVED" }) do
+	"NEW_RECIPE_LEARNED", "SPELLS_CHANGED", "CRAFT_SHOW", "CRAFT_UPDATE", "SKILL_LINES_CHANGED", "GET_ITEM_INFO_RECEIVED" }) do
 	pcall(frame.RegisterEvent, frame, event) -- an event this client does not know must not stop the rest
 end
 frame:SetScript("OnEvent", function(_, event)
@@ -432,16 +493,29 @@ frame:SetScript("OnEvent", function(_, event)
 			ScanTradeSkill()
 		end, 1)
 		Soon("skills", UpdateSkills, 2)
+		Soon("auto", AutoRead, 4)
+	elseif event == "SPELLS_CHANGED" then
+		Soon("auto", AutoRead, 5)
 	elseif event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then
 		Soon("craft", ScanCraft, 1)
 	elseif event == "SKILL_LINES_CHANGED" then
 		Soon("skills", UpdateSkills, 2)
+		Soon("auto", AutoRead, 5)
 	elseif event == "GET_ITEM_INFO_RECEIVED" then
 		Soon("names", function() P.Fire("Names") end, 0.5)
 	end
 end)
 
-P.On("Started", function() Soon("skills", UpdateSkills, 6) end)
+P.On("Started", function()
+	Soon("skills", UpdateSkills, 6)
+	Soon("auto", AutoRead, 14)
+end)
+
+-- A catalogue arrived or grew, or this character's professions changed: look again.
+P.On("Blob", function(key)
+	if type(key) == "string" and key:sub(1, 2) == "C:" then Soon("auto", AutoRead, 3) end
+end)
+P.On("Crafts", function() Soon("auto", AutoRead, 3) end)
 
 --- Look at the skill list again (the Crafters tab asks when it opens).
 function P.RefreshSkills()

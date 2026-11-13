@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.7
+
+- Recipes are shared automatically. Once anyone in the guild has opened a profession's window, every member with that profession has their recipes read without opening anything, and newly learned recipes are added as you learn them.
+
 ## 0.9.6
 
 - Tells you when a newer version is out: a chat line at login and a note in the window's title bar. The news is passed along between members, so it reaches you even if nobody on the new version is online.

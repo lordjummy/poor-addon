@@ -511,7 +511,7 @@ local function BuildCrafters(panel)
 						n and (n .. " recipes") or "|cff808080none yet|r", rank = r.rank, online = r.online, whisper = r.char,
 						open = n and { char = r.char, prof = r.prof } or nil,
 						tip = { P.ShortName(r.char) .. ": " .. r.prof,
-							n and (n .. " recipes shared.") or "No recipes shared yet. They are read when this character opens the profession window." } })
+							n and (n .. " recipes shared.") or "No recipes yet. They appear automatically once anyone in the guild has opened this profession's window." } })
 				end
 			end
 			table.sort(rows, function(a, b)
@@ -521,7 +521,7 @@ local function BuildCrafters(panel)
 			Heads("Character", "Skill", "", "Recipes shared")
 			hint:SetText(chosen and "Click a crafter to see their recipes." or "")
 			empty:SetText("No professions known yet. They arrive as guildmates log in with the addon.")
-			footer:SetText(chosen and ("%s: %d crafter%s, %d recipes shared. Open your profession windows once to share yours."):format(
+			footer:SetText(chosen and ("%s: %d crafter%s, %d recipes shared. Recipes are read automatically; opening the profession window once helps if none show."):format(
 				chosen, #rows, #rows == 1 and "" or "s", recipes) or "")
 		end
 		list:SetRows(rows)
