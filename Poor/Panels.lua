@@ -896,27 +896,46 @@ local function BuildRecruit(panel)
 	end)
 	find:SetScript("OnLeave", GameTooltip_Hide)
 
-	local pitchLabel = Label(detail, "Pitch", "GameFontNormalSmall")
+	-- The message typed into a recruiting whisper. Everyone can have their
+	-- own; officers can also set the one the guild uses by default.
+	local pitchLabel = Label(detail, "Message", "GameFontNormalSmall")
 	pitchLabel:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -118)
-	local pitchBox = EditBox(detail, 340, P.PITCH_MAX)
+	local pitchBox = EditBox(detail, 268, P.PITCH_MAX)
 	pitchBox:SetPoint("LEFT", pitchLabel, "RIGHT", 8, 0)
-	local pitchSave = Button(detail, "Save", 50, function()
-		local ok, err = P.SetPitch(pitchBox:GetText())
-		if not ok then return P.Print(err) end
+	local function Explain(self, title, text)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine(title)
+		GameTooltip:AddLine(text, 1, 1, 1, true)
+		GameTooltip:AddLine("Filled in for you: {class}, {name} (their first name), {level}, {guild}.", 0.6, 0.6, 0.6, true)
+		GameTooltip:Show()
+	end
+	local pitchSave = Button(detail, "Save", 46, function()
+		P.SetMyPitch(pitchBox:GetText())
 		pitchBox:ClearFocus()
+		P.Print(P.db.opts.myPitch and "Your own recruiting message is saved." or "Back to the guild's recruiting message.")
 	end)
 	pitchSave:SetPoint("LEFT", pitchBox, "RIGHT", 6, 0)
 	pitchSave:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:AddLine("The opening line")
-		GameTooltip:AddLine("What is typed into the whisper for everyone in the guild who recruits. {class} becomes the class name.", 1, 1, 1, true)
-		GameTooltip:Show()
+		Explain(self, "Your own message", "Used when you press Whisper, in place of the guild's. Save an empty box to go back to the guild's. "
+			.. "You can still edit the text in the chat box before sending.")
 	end)
 	pitchSave:SetScript("OnLeave", GameTooltip_Hide)
-	local pitchText = Label(detail)
-	pitchText:SetPoint("LEFT", pitchLabel, "RIGHT", 8, 0)
-	pitchText:SetWidth(400)
-	pitchText:SetTextColor(0.75, 0.75, 0.75)
+	local pitchGuild = Button(detail, "For guild", 64, function()
+		local ok, err = P.SetPitch(pitchBox:GetText())
+		if not ok then return P.Print(err) end
+		P.SetMyPitch("") -- the officer's own copy would otherwise hide the guild's
+		pitchBox:ClearFocus()
+		P.Print("That is now the guild's recruiting message.")
+	end)
+	pitchGuild:SetPoint("LEFT", pitchSave, "RIGHT", 4, 0)
+	pitchGuild:SetScript("OnEnter", function(self)
+		Explain(self, "The guild's message", "Make this the message every member starts from, unless they saved one of their own.")
+	end)
+	pitchGuild:SetScript("OnLeave", GameTooltip_Hide)
+	local pitchNote = Label(detail)
+	pitchNote:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -140)
+	pitchNote:SetWidth(450)
+	pitchNote:SetTextColor(0.6, 0.6, 0.6)
 
 	local list = List(detail, {
 		{ "Player", 120 }, { "Lvl", 36, "RIGHT" }, { "", 6 }, { "Zone", 90 }, { "", 56 },
@@ -927,6 +946,7 @@ local function BuildRecruit(panel)
 		cells[2]:SetText(c.level)
 		cells[4]:SetText(c.zone)
 		cells[5]:SetText(done and ("|cff999999" .. done.what .. "|r") or "")
+		row.whisper:SetShown(not done or done.by == P.me)
 		row.invite:SetShown(P.CanInviteToGuild())
 		row:SetAlpha(done and 0.6 or 1)
 	end, function(row)
@@ -942,14 +962,16 @@ local function BuildRecruit(panel)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:AddLine(P.ClassColored(P.ShortName(c.name), c.class))
 			GameTooltip:AddLine(("Level %d %s in %s, no guild."):format(c.level, P.ClassLabel(c.class), c.zone ~= "" and c.zone or "an unknown place"), 1, 1, 1, true)
-			if done then GameTooltip:AddLine(("You %s them %s."):format(done.what, P.Ago(done.ts)), 0.8, 0.8, 0.8) end
+			if done then
+				GameTooltip:AddLine(("%s %s them %s."):format(done.by == P.me and "You" or P.ShortName(done.by), done.what, P.Ago(done.ts)), 1, 0.82, 0)
+			end
 			GameTooltip:AddLine("Whisper opens the chat box with the pitch typed. Nothing is sent until you press Enter.", 0.6, 0.6, 0.6, true)
 			GameTooltip:Show()
 		end)
-	end, -164, 46)
+	end, -180, 46)
 
 	local empty = Label(detail, nil, "GameFontDisable")
-	empty:SetPoint("CENTER", detail, "CENTER", -10, -40)
+	empty:SetPoint("CENTER", detail, "CENTER", -10, -50)
 	empty:SetWidth(400)
 	empty:SetWordWrap(true)
 	empty:SetJustifyH("CENTER")
@@ -985,22 +1007,20 @@ local function BuildRecruit(panel)
 			maxBox:SetText(math.min(P.MAX_LEVEL, level + 5))
 		end
 
-		-- Officers edit the pitch; everyone else reads it.
-		local pitch = P.Recruit().pitch
-		if not pitch or pitch == "" then pitch = P.DEFAULT_PITCH end
-		pitchBox:SetShown(officer)
-		pitchSave:SetShown(officer)
-		pitchText:SetShown(not officer)
-		pitchText:SetText(pitch)
-		if officer and shownPitch ~= pitch and not pitchBox:HasFocus() then
-			shownPitch = pitch
-			pitchBox:SetText(pitch)
+		-- The message box shows the template in use, unless it is being typed in.
+		local template, whose = P.PitchTemplate()
+		pitchGuild:SetShown(officer)
+		if shownPitch ~= template and not pitchBox:HasFocus() then
+			shownPitch = template
+			pitchBox:SetText(template)
 		end
+		local example = chosen and P.Pitch(chosen, { name = "Thrall", level = 30 }) or ""
+		pitchNote:SetText(("%s  |cffbbbbbb%s|r"):format(whose == "mine" and "Your own message. Preview:" or "The guild's message. Preview:", example))
 
 		list:SetRows(P.candidates)
 		empty:SetText("Pick a class on the left and press Find to look for players without a guild.")
 		empty:SetShown(#P.candidates == 0)
-		footer:SetText(P.candidateNote or "Whispers go one at a time, and only when you press Enter. Players you already approached are dimmed for a month.")
+		footer:SetText(P.candidateNote or "Whispers go one at a time, and only when you press Enter. Players anyone in the guild approached are dimmed for a month.")
 	end
 end
 

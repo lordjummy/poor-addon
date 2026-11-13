@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0
+
+- Recruit tab: write your own recruiting message, with the player's name, class and level filled in. Officers can set the guild's default.
+- Players approached by anyone in the guild are now marked for everyone, with who did it and when.
+
 ## 0.11.1
 
 - Recruit tab lists all nine classes for both factions.
