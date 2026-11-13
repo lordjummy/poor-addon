@@ -23,7 +23,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" "dist/poor-$version.zip" \
+          gh release create "$GITHUB_REF_NAME" "dist/poor-$version-forever.zip" \
             --title "$version" --notes-file "dist/notes-$version.md"
       - name: Upload to CurseForge
         env:

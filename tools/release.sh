@@ -39,7 +39,9 @@ changelog="$(awk -v v="## ${version%%-*}" '$0 == v {on=1; next} /^## / {on=0} on
 [ -n "$changelog" ] || changelog="Version $version"
 
 mkdir -p dist
-archive="dist/poor-$version.zip"
+# WowUp picks a release's zip by the game it is for, and only takes one
+# whose name ends in "-forever" for WoW Forever.
+archive="dist/poor-$version-forever.zip"
 rm -f "$archive"
 zip -q -r "$archive" Poor
 printf '%s\n' "$changelog" > "dist/notes-$version.md"   # the GitHub release uses this as its text
