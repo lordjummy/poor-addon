@@ -2,7 +2,7 @@
 
 ## 0.16.0
 
-- A song plays when you level up, and a chat line with a short ding tells you when a guildmate does (silent in dungeons and raids). Both can be turned off in the options. /poor ding plays the song.
+- A song plays when you level up and your character says "Ding BTW" with the new level in guild chat, and a chat line with a short ding tells you when a guildmate does (silent in dungeons and raids). Each can be turned off in the options. /poor ding plays the song.
 
 ## 0.15.0
 

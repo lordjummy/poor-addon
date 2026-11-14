@@ -731,7 +731,7 @@ local DEFAULT_OPTS = {
 	-- to guild chat, so members without the addon see them. Board posts print.
 	shareShame = false, groupChat = true, boardNotify = true,
 	shareQuests = true, -- the quest log, so guildmates on the same quests find each other
-	levelSong = true, guildDing = true } -- a song for my own level-up, a ding for a guildmate's
+	levelSong = true, guildDing = true, dingChat = true } -- a song for my own level-up, a ding for a guildmate's
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.

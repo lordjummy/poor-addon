@@ -40,6 +40,8 @@ local ROWS = {
 	{ header = "Level-ups" },
 	{ key = "levelSong", label = "Play the guild song when I level up",
 		tip = "Plays the addon's level-up song on top of the game's own sound." },
+	{ key = "dingChat", label = "Say \"Ding BTW\" in guild chat when I level up",
+		tip = "Writes \"Ding BTW\" and your new level in guild chat each time you gain a level." },
 	{ key = "guildDing", label = "Tell me when a guildmate levels up",
 		tip = "A chat line and a short ding when a guildmate who is online gains a level. The ding stays silent in dungeons and raids." },
 	{ header = "PvP alerts" },
