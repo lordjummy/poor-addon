@@ -1539,7 +1539,7 @@ local function BuildWindow()
 	end
 
 	local alert = Button(f, "|cffff6060PvP alert|r", SIDEBAR - 20, function(_, button)
-		if button == "RightButton" then P.ShowTab("Alerts") else P.SendPvPAlert("") end
+		if button == "RightButton" then P.ShowTab("PvP", "Alert log") else P.SendPvPAlert("") end
 	end)
 	alert:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	alert:SetHeight(22)
@@ -1586,6 +1586,6 @@ P.On("Gold", Refresh)
 P.On("Events", Refresh)
 P.On("Funds", Refresh)
 P.On("Options", Refresh)
-for _, what in ipairs({ "Alts", "Shame", "Board", "Blob", "Crafts", "Names", "Alerts", "Race", "Groups", "Recruit", "Version", "Quests" }) do
+for _, what in ipairs({ "Alts", "Shame", "Board", "Blob", "Crafts", "Names", "Alerts", "Race", "Groups", "Recruit", "Version", "Quests", "Honor", "Kos", "Kills" }) do
 	P.On(what, Refresh)
 end

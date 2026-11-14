@@ -127,7 +127,7 @@ function P.MigrateNames()
 			t[k] = nil
 		end
 	end
-	for _, key in ipairs({ "gold", "history", "shame", "profs", "mains", "myChars", "roles", "bankChars", "bankScan", "xp", "levels", "race" }) do
+	for _, key in ipairs({ "gold", "history", "shame", "profs", "mains", "myChars", "roles", "bankChars", "bankScan", "xp", "levels", "race", "honor" }) do
 		rekey(db[key])
 	end
 	for _, link in pairs(db.mains or {}) do link.main = canon(link.main) end
@@ -156,7 +156,7 @@ end
 function P.RenameCharacter(old, new)
 	if not old or not new or old == new then return false end
 	local db, touched = P.db, false
-	for _, key in ipairs({ "gold", "history", "shame", "profs", "mains", "myChars", "roles", "bankChars", "bankScan", "xp", "levels", "race" }) do
+	for _, key in ipairs({ "gold", "history", "shame", "profs", "mains", "myChars", "roles", "bankChars", "bankScan", "xp", "levels", "race", "honor" }) do
 		local t = db[key]
 		if t and t[old] ~= nil then
 			if t[new] == nil then t[new] = t[old] end
@@ -731,9 +731,11 @@ local DEFAULT_OPTS = {
 	-- to guild chat, so members without the addon see them. Board posts print.
 	shareShame = false, groupChat = true, boardNotify = true,
 	shareQuests = true, -- the quest log, so guildmates on the same quests find each other
-	levelSong = true, guildDing = true, dingChat = true } -- a song for my own level-up, a ding for a guildmate's
+	levelSong = true, guildDing = true, dingChat = true, -- a song for my own level-up, a ding for a guildmate's
+	shareHonor = true, killFeed = true, kosWarn = true } -- honor board, guildmates' kills, kill-on-sight warnings
 
 local function Greet()
+	P.StartNews()
 	-- An update is worth saying even with the greeting turned off.
 	if P.UpdateAvailable() and not P.toldOutdated then
 		P.toldOutdated = true
@@ -822,7 +824,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		P.db.history = P.db.history or {}
 		P.db.roles = P.db.roles or {}
 		P.db.funds = P.db.funds or {}
-		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog", "addonUsers", "addonVersions", "wizardChars" }) do
+		for _, key in ipairs({ "mains", "myChars", "shame", "board", "blobs", "bankChars", "bankScan", "profs", "alertLog", "race", "levels", "xp", "pledges", "fundAuto", "groups", "recruit", "recruitLog", "addonUsers", "addonVersions", "wizardChars", "honor", "kos", "killLog" }) do
 			P.db[key] = P.db[key] or {}
 		end
 		P.db.opts = P.db.opts or {}
@@ -943,6 +945,7 @@ function P.ShowDebug()
 		out(table.concat(parts, "  "))
 	end)
 	section("Professions", function() P.DebugSkills(out) end)
+	section("PvP", function() P.DebugPvp(out) end)
 	local text = table.concat(lines, "\n"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 	if P.ShowText then
 		P.ShowText("poor debug report", text)
@@ -973,6 +976,17 @@ SlashCmdList.POOR = function(msg)
 		end
 	elseif cmd == "pvp" then
 		P.SendPvPAlert(rest)
+	elseif cmd == "news" then
+		P.ShowNews()
+	elseif cmd == "kos" then
+		-- With an enemy player targeted: list them, the rest of the line is the reason.
+		local enemy = P.EnemyPlayer("target")
+		if enemy then
+			local ok, problem = P.AddKos(enemy.name, rest, enemy.class, enemy.level)
+			P.Print(ok and (enemy.name .. " is on the kill-on-sight list.") or problem)
+		else
+			P.ShowTab("PvP", "Kill on sight")
+		end
 	elseif cmd == "alerts" then
 		P.db.opts.alerts = not P.db.opts.alerts
 		P.Print("Receiving PvP alerts: " .. (P.db.opts.alerts and "on" or "off"))
@@ -1071,6 +1085,8 @@ SlashCmdList.POOR = function(msg)
 		print("  /poor share - toggle sharing your gold with the guild")
 		print("  /poor status - whether the addon is running, and the guild name it sees")
 		print("  /poor debug - a troubleshooting report in a window you can copy from")
+		print("  /poor news - what changed in the latest versions")
+		print("  /poor kos [reason] - put your target on the kill-on-sight list, or open the list")
 		print("  /poor ding - play the level-up song")
 		print("  /poor testnotice - show what an update notice looks like (on your screen only)")
 		print("  /poor minimap - toggle the minimap button")

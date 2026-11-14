@@ -1,5 +1,6 @@
 -- poor -- Panels.lua
--- The tabs added after the first four: Board, Shame, Bank, Crafters, Alerts.
+-- The tabs added after the first four: Board, Shame, Bank, Crafters, Alerts,
+-- Race, Groups, Recruit, Quests, Honor, Kill on sight, Kill feed, Home.
 -- Built with the helpers UI.lua exports in P.ui.
 local _, P = ...
 
@@ -695,11 +696,15 @@ local function BuildGroups(panel)
 		activity:ClearFocus()
 		panel:Refresh()
 	end
-	local pick = Button(panel, "Dungeons", 76, function(self)
+	local pick = Button(panel, "Pick", 76, function(self)
 		if MenuUtil and MenuUtil.CreateContextMenu then
 			MenuUtil.CreateContextMenu(self, function(_, root)
 				-- 33 dungeons: let the menu scroll rather than run off the screen.
 				if root.SetScrollMode then root:SetScrollMode(420) end
+				root:CreateTitle("PvP")
+				for _, d in ipairs(P.BATTLEGROUNDS) do
+					root:CreateButton(("%s  |cff999999%d-%d|r"):format(d[1], d[2], d[3]), function() Pick(d) end)
+				end
 				root:CreateTitle("Dungeon")
 				for _, d in ipairs(P.DUNGEONS) do
 					root:CreateButton(("%s  |cff999999%d-%d|r"):format(d[1], d[2], d[3]), function() Pick(d) end)
@@ -1219,6 +1224,200 @@ end
 -- Several panels under one tab, with a row of buttons to switch between
 -- them. parts = { { "Label", builder, visible = function() ... end }, ... }
 ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+-- Honor board
+---------------------------------------------------------------------------
+local function BuildHonor(panel)
+	local sortBy = "hk"
+	local SORT = { [3] = "rank", [4] = "hk", [5] = "wkhk", [6] = "kb" }
+	local HEAD = { [3] = "Rank", [4] = "Honorable kills", [5] = "This week", [6] = "Killing blows" }
+	local list
+	list = List(panel, { { "#", 24, "RIGHT" }, { "Name", 150 }, { "Rank", 150 }, { "Honorable kills", 110, "RIGHT" },
+		{ "This week", 80, "RIGHT" }, { "Killing blows", 100, "RIGHT" } }, function(row, e)
+		local c = row.cells
+		c[1]:SetText(e.rank_)
+		c[2]:SetText(P.ClassColored(P.ShortName(e.name), e.class) .. (#e.chars > 1 and (" |cff808080+" .. (#e.chars - 1) .. "|r") or ""))
+		c[3]:SetText(P.RankName(e.rank) or "|cff808080-|r")
+		c[4]:SetText(e.hk > 0 and e.hk or "|cff808080-|r")
+		c[5]:SetText(math.max(e.wkhk, e.wkkb))
+		c[6]:SetText(e.kb)
+	end, function(row)
+		row:SetScript("OnEnter", function(self)
+			local e = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(P.ClassColored(P.ShortName(e.name), e.class))
+			GameTooltip:AddLine("Honorable kills are the game's own lifetime count.", 0.6, 0.6, 0.6, true)
+			GameTooltip:AddLine("Killing blows are counted by the addon since it was installed.", 0.6, 0.6, 0.6, true)
+			if #e.chars > 1 then
+				table.sort(e.chars)
+				for _, char in ipairs(e.chars) do
+					local h = P.db.honor[char]
+					GameTooltip:AddDoubleLine(ClassName(char), ("%s kills, %d blows"):format(h.hk > 0 and h.hk or "-", h.kb), 1, 1, 1, 1, 1, 1)
+				end
+			end
+			GameTooltip:Show()
+		end)
+	end, nil, nil, function(column)
+		if not SORT[column] then return end
+		sortBy = SORT[column]
+		panel:Refresh()
+	end)
+
+	local hint = Label(panel)
+	hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -66)
+	hint:SetTextColor(0.6, 0.6, 0.6)
+	local total = Label(panel, nil, "GameFontNormalSmall")
+	total:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	local empty = Label(panel, "No kills on the board yet. Go and find some.", "GameFontDisable")
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
+
+	function panel:Refresh()
+		local rows = P.HonorList()
+		local kills, week = 0, 0
+		table.sort(rows, function(a, b)
+			local x, y = a[sortBy], b[sortBy]
+			if sortBy == "wkhk" then x, y = math.max(a.wkhk, a.wkkb), math.max(b.wkhk, b.wkkb) end
+			if x ~= y then return x > y end
+			return a.name < b.name
+		end)
+		for i, e in ipairs(rows) do
+			e.rank_ = i
+			kills, week = kills + e.hk, week + math.max(e.wkhk, e.wkkb)
+		end
+		for column, key in pairs(SORT) do
+			list.heads[column]:SetText(HEAD[column] .. (sortBy == key and " *" or ""))
+		end
+		list:SetRows(rows)
+		empty:SetShown(#rows == 0)
+		hint:SetText(P.db.opts.shareHonor and "Click a column title to sort. Weekly counts start again every Thursday."
+			or "You are not on this board: sharing your honor is turned off in the options.")
+		total:SetText(#rows > 0 and ("The guild has %d honorable kills, %d of them this week."):format(kills, week) or "")
+	end
+end
+
+---------------------------------------------------------------------------
+-- Kill on sight
+---------------------------------------------------------------------------
+local function BuildKos(panel)
+	local pending -- the enemy picked from the target or the recent menu: { name, class, level }
+
+	local nameLabel = Label(panel, "Enemy", "GameFontNormalSmall")
+	nameLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -66)
+	local nameBox = EditBox(panel, 150, 40)
+	nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
+	nameBox:SetScript("OnTextChanged", function(self, byUser)
+		if byUser and pending and self:GetText() ~= pending.name then pending = nil end
+	end)
+	local whyLabel = Label(panel, "Why", "GameFontNormalSmall")
+	whyLabel:SetPoint("LEFT", nameBox, "RIGHT", 12, 0)
+	local whyBox = EditBox(panel, 200, P.KOS_REASON_MAX)
+	whyBox:SetPoint("LEFT", whyLabel, "RIGHT", 8, 0)
+
+	local function Fill(enemy)
+		pending = enemy
+		nameBox:SetText(enemy.name)
+		whyBox:SetFocus()
+	end
+	local function Add()
+		local name = strtrim(nameBox:GetText())
+		local ok, problem = P.AddKos(name, whyBox:GetText(), pending and pending.class, pending and pending.level)
+		if not ok then return P.Print(problem) end
+		pending = nil
+		nameBox:SetText("")
+		whyBox:SetText("")
+		nameBox:ClearFocus()
+		whyBox:ClearFocus()
+	end
+	nameBox:SetScript("OnEnterPressed", Add)
+	whyBox:SetScript("OnEnterPressed", Add)
+
+	local add = Button(panel, "Add", 50, Add)
+	add:SetPoint("LEFT", whyBox, "RIGHT", 8, 0)
+	local target = Button(panel, "My target", 76, function()
+		local enemy = P.EnemyPlayer("target")
+		if not enemy then return P.Print("Target an enemy player first.") end
+		Fill(enemy)
+	end)
+	target:SetPoint("LEFT", add, "RIGHT", 6, 0)
+	local recentButton = Button(panel, "Recent", 60, function(self)
+		local seen = P.RecentEnemies()
+		if #seen == 0 then return P.Print("No enemy players seen this session.") end
+		if MenuUtil and MenuUtil.CreateContextMenu then
+			MenuUtil.CreateContextMenu(self, function(_, root)
+				root:CreateTitle("Enemies seen lately")
+				for _, enemy in ipairs(seen) do
+					local what = P.DescribeEnemy(enemy.class, enemy.level)
+					root:CreateButton(P.ClassColored(enemy.name, enemy.class) .. (what and ("  |cff999999" .. what .. "|r") or ""),
+						function() Fill(enemy) end)
+				end
+			end)
+		else
+			Fill(seen[1])
+		end
+	end)
+	recentButton:SetPoint("LEFT", target, "RIGHT", 6, 0)
+
+	local list = List(panel, { { "Enemy", 150 }, { "", 110 }, { "Why", 230 }, { "Added by", 110 }, { "When", 70 } }, function(row, e)
+		local c = row.cells
+		c[1]:SetText(P.ClassColored(e.name, e.class))
+		c[2]:SetText(P.DescribeEnemy(e.class, e.level) or "")
+		c[3]:SetText(e.reason)
+		c[4]:SetText(ClassName(e.by))
+		c[5]:SetText(date("%d %b", e.ts))
+	end, function(row)
+		row:SetScript("OnClick", function(self)
+			local e = self.data
+			if not IsShiftKeyDown() then return end
+			if not P.RemoveKos(e.name) then P.Print("Only whoever added them, or an officer, can take them off the list.") end
+		end)
+		row:SetScript("OnEnter", function(self)
+			local e = self.data
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(P.ClassColored(e.name, e.class))
+			if e.reason ~= "" then GameTooltip:AddLine(e.reason, 1, 1, 1, true) end
+			GameTooltip:AddLine("Added by " .. P.ShortName(e.by) .. " on " .. date("%d %b %Y", e.ts), 0.6, 0.6, 0.6)
+			if P.CanRemoveKos(e) then GameTooltip:AddLine("Shift-click to take them off the list", 0.6, 0.6, 0.6) end
+			GameTooltip:Show()
+		end)
+	end)
+
+	local footer = Label(panel, nil, "GameFontNormalSmall")
+	footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+	local empty = Label(panel, "Nobody is on the list. Everyone has behaved, so far.", "GameFontDisable")
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
+
+	function panel:Refresh()
+		local rows = P.KosList()
+		list:SetRows(rows)
+		empty:SetShown(#rows == 0)
+		footer:SetText(P.db.opts.kosWarn and "You are warned when someone on the list is your target, under your mouse or shows a nameplate."
+			or "Warnings are turned off in the options.")
+	end
+end
+
+---------------------------------------------------------------------------
+-- Kill feed
+---------------------------------------------------------------------------
+local function BuildKills(panel)
+	local list = List(panel, { { "When", 100 }, { "Who", 130 }, { "Killed", 170 }, { "Where", 220 } }, function(row, k)
+		local c = row.cells
+		c[1]:SetText(date("%d %b %H:%M", k.ts))
+		c[2]:SetText(ClassName(k.by))
+		c[3]:SetText(P.ClassColored(k.victim, k.class))
+		c[4]:SetText(k.zone or "")
+	end)
+	local hint = Label(panel, "Enemy players killed out in the world by guildmates who run the addon. Battleground kills count on the Honor board only.")
+	hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -66)
+	hint:SetTextColor(0.6, 0.6, 0.6)
+	local empty = Label(panel, "No kills yet. The other side sleeps soundly.", "GameFontDisable")
+	empty:SetPoint("CENTER", panel, "CENTER", 0, -10)
+
+	function panel:Refresh()
+		list:SetRows(P.db.killLog)
+		empty:SetShown(#P.db.killLog == 0)
+	end
+end
+
 local function Combined(parts)
 	return function(panel)
 		local active, frames, buttons = 1, {}, {}
@@ -1285,7 +1484,9 @@ local function BuildHome(panel)
 		row.cells[2]:SetText(e.text)
 	end, function(row)
 		row:SetScript("OnClick", function(self)
-			if self.data.tab then
+			if self.data.run then
+				self.data.run()
+			elseif self.data.tab then
 				PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
 				P.ShowTab(self.data.tab, self.data.part)
 			end
@@ -1295,7 +1496,7 @@ local function BuildHome(panel)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:AddLine(e.area)
 			GameTooltip:AddLine(e.text, 1, 1, 1, true)
-			if e.tab then GameTooltip:AddLine("Click to open it.", 0.6, 0.6, 0.6) end
+			if e.tab or e.run then GameTooltip:AddLine("Click to open it.", 0.6, 0.6, 0.6) end
 			GameTooltip:Show()
 		end)
 	end, -100, 30)
@@ -1309,6 +1510,10 @@ local function BuildHome(panel)
 	function panel:Refresh()
 		local rows = {}
 		local function add(area, text, tab, part) tinsert(rows, { area = area, text = text, tab = tab, part = part }) end
+
+		if P.HasNews() then
+			tinsert(rows, { area = "New", text = ("You updated to %s. See what changed."):format(P.VERSION), run = P.ShowNews })
+		end
 
 		local online = 0
 		for _, m in ipairs(P.roster) do
@@ -1412,7 +1617,7 @@ local function BuildHome(panel)
 
 		local last = P.db.alertLog[1]
 		if last and P.Now() - last.ts < 3600 then
-			add("PvP", ("%s at %s, %s"):format(ClassName(last.from), P.AlertPlace(last), P.Ago(last.ts)), "Alerts")
+			add("PvP", ("%s at %s, %s"):format(ClassName(last.from), P.AlertPlace(last), P.Ago(last.ts)), "PvP", "Alert log")
 		end
 
 		list:SetRows(rows)
@@ -1439,7 +1644,13 @@ P.tabs = {
 	{ "Leaderboards", Combined({
 		{ "Poorest", B.Poorest, width = 90 },
 		{ "Race", BuildRace, width = 90 },
+		{ "Honor", BuildHonor, width = 90, visible = function() return #P.HonorList() > 0 end },
 		{ "Shame", BuildShame, width = 90, visible = function() return next(P.db.shame) ~= nil end },
+	}) },
+	{ "PvP", Combined({
+		{ "Kill on sight", BuildKos, width = 110 },
+		{ "Kill feed", BuildKills, width = 90 },
+		{ "Alert log", BuildAlerts, width = 90 },
 	}) },
 	{ "Crafters", BuildCrafters },
 	{ "Bank", BuildBank, visible = function()
@@ -1450,5 +1661,4 @@ P.tabs = {
 		return false
 	end },
 	{ "Recruit", BuildRecruit, visible = function() return P.CanRecruit() end },
-	{ "Alerts", BuildAlerts, hidden = true }, -- opened by right-clicking the PvP alert button
 }

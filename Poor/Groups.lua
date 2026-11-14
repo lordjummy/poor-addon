@@ -36,6 +36,12 @@ P.DUNGEONS = {
 	{ "Stratholme: Living", 58, 60 }, { "Stratholme: Undead", 58, 60 },
 }
 
+-- Battlegrounds and world PvP, offered above the dungeons. The level ranges
+-- are the classic brackets' lower bounds.
+P.BATTLEGROUNDS = {
+	{ "Warsong Gulch", 10, 60 }, { "Arathi Basin", 20, 60 }, { "Alterac Valley", 51, 60 }, { "World PvP", 1, 60 },
+}
+
 local function Line(g)
 	return ("U^%s^%d^%s^%s^%d^%s^%s^%d^%d^%s"):format(g.id, g.rev, g.state, g.author, g.created,
 		P.ROLE_NAME[g.role] and g.role or "-", (g.need and g.need ~= "") and g.need or "-", g.min or 0, g.max or 0, g.activity)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.0
+
+- PvP tab with a guild kill-on-sight list: add your target with /poor kos, and get a warning when a listed enemy is your target, under your mouse or shows a nameplate.
+- Kill feed: a chat line when a guildmate kills an enemy player out in the world, and a list of recent kills.
+- Honor board under Leaderboards: honorable kills, this week's kills, killing blows and PvP rank.
+- Battlegrounds and world PvP can be picked on the Groups tab.
+- What's new: after an update, a chat line and a row on the Home view open a short list of changes. /poor news shows it any time.
+- The PvP alert history moved to the PvP tab.
+
 ## 0.16.0
 
 - A song plays when you level up and your character says "Ding BTW" with the new level in guild chat, and a chat line with a short ding tells you when a guildmate does (silent in dungeons and raids). Each can be turned off in the options. /poor ding plays the song.
