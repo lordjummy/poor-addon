@@ -730,7 +730,8 @@ local DEFAULT_OPTS = {
 	-- Deaths and repair bills are private until opted in. Group posts also go
 	-- to guild chat, so members without the addon see them. Board posts print.
 	shareShame = false, groupChat = true, boardNotify = true,
-	shareQuests = true } -- the quest log, so guildmates on the same quests find each other
+	shareQuests = true, -- the quest log, so guildmates on the same quests find each other
+	levelSong = true, guildDing = true } -- a song for my own level-up, a ding for a guildmate's
 
 local function Greet()
 	-- An update is worth saying even with the greeting turned off.
@@ -1023,6 +1024,12 @@ SlashCmdList.POOR = function(msg)
 			P.Print("That was a test: nothing was sent to the guild. /poor testnotice again, or /reload, removes it.")
 		end
 		P.Fire("Version")
+	elseif cmd == "ding" then
+		if P.PlayLevelSong() then
+			P.Print("That is the level-up song.")
+		else
+			P.Print("No level-up song found. It should be Sounds\\levelup.mp3 inside the Poor addon folder; /reload after adding it.")
+		end
 	elseif cmd == "debug" then
 		P.ShowDebug()
 	elseif cmd == "status" then
@@ -1064,6 +1071,7 @@ SlashCmdList.POOR = function(msg)
 		print("  /poor share - toggle sharing your gold with the guild")
 		print("  /poor status - whether the addon is running, and the guild name it sees")
 		print("  /poor debug - a troubleshooting report in a window you can copy from")
+		print("  /poor ding - play the level-up song")
 		print("  /poor testnotice - show what an update notice looks like (on your screen only)")
 		print("  /poor minimap - toggle the minimap button")
 		print("  /poor greet - toggle the login greeting")

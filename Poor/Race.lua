@@ -159,7 +159,10 @@ P.On("Roster", function()
 		if m.level >= P.MAX_LEVEL and not P.db.race[m.name] then
 			Sighted(m.name, not (before and before < P.MAX_LEVEL), m.class)
 		end
-		if m.level > 0 then P.db.levels[m.name] = m.level end
+		if m.level > 0 then
+			P.db.levels[m.name] = m.level
+			if before and m.level > before then P.Fire("LevelUp", m.name, m.level, m.class, m.online) end
+		end
 	end
 end)
 

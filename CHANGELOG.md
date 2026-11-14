@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0
+
+- A song plays when you level up, and a chat line with a short ding tells you when a guildmate does (silent in dungeons and raids). Both can be turned off in the options. /poor ding plays the song.
+
 ## 0.15.0
 
 - Shared quests, on the Groups tab: your quests that a guildmate has too, group quests first, with one click to ask them along.
